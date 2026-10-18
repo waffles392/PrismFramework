@@ -17,18 +17,17 @@ subclassed, then attached with `Scene2D.addRootChild(_:)` or `Collection.add(_:)
 there is no way to define one object tree and stamp out copies of it.
 
 the AXB asset format already has the idea - an `.ax` file opens with
-`template Ship { ... }`, and polygons inherit it with
-`polygon ImpulseCore : Ship { ... }` - so a prefab is the same thing one level
+`template CoolTemplate { ... }`, and polygons inherit it with
+`polygon CoolPolygon : CoolTemplate { ... }` so a prefab is the same thing one level
 up: a named tree that can be instantiated many times, each instance carrying its
 own state.
 
 ### particles as meshes
 
-`ParticleSystem` is CPU-only and hands back `[ParticleVertex]`
-(`buildVertices()`), a type no `Mesh` accepts. a game has to convert those
-vertices itself and draw them through `Canvas2D` - CASCADE does exactly that,
-one `context.triangle(...)` call per particle, per frame - which drops the UVs
-and rules out a texture, a material or a blend mode.
+`ParticleSystem` is CPU-only and hands back `[ParticleVertex]` (`buildVertices()`),
+a type no `Mesh` accepts. a game has to convert those vertices itself and draw
+them through `Canvas2D` - one `context.triangle(...)` call per particle, per
+frame - which drops the UVs and rules out a texture, a material or a blend mode.
 
 the plan is for a particle system to own a `Mesh` with a `Surface`, so particles
 become ordinary geometry: one submit instead of one call per particle, and real
@@ -90,26 +89,92 @@ checks `make check` runs would see a diff on every rebuild.
 URL. the least-breaking shape is an optional overlay - the store checks a mounted
 shard, then falls back to the bundle.
 
+### fixed-update phase
+
+the README and the module table both advertise "a fixed-timestep loop", but the
+run loop does not do that. `Prism.run(...)` calls `onUpdate(deltaTime)` with the
+raw frame delta, and `FixedTimestep` is a helper the game has to wire up itself;
+`TimeScheduler` is likewise driven by hand. a game that wants deterministic
+simulation therefore drops to the lowest-level `run` overload or steps time
+itself.
+
+the plan is to let the loop own it: a fixed step with an accumulator, an optional
+interpolation factor for the render phase, and `FixedTimestep`/`TimeScheduler`
+fed from the loop rather than the game. failing that, the README should stop
+claiming a fixed-timestep loop.
+
+### scene run-loop wiring
+
+`Scene2D` exposes `clearColor` and `cameraTransform`, and its docs say the run
+loop reads them, but `run(scene:)` does neither. the loop clears with a
+hard-coded `Color(0, 0, 0, 1)` and draws the scene through
+`scene.draw(in: RenderEncoder)`, so `cameraTransform` - which is only applied in
+`Scene2D.draw(in: Canvas2D)` - never runs, and `clearColor` is ignored. the
+`GameObject` doc example overrides `draw(in: Canvas2D)`, a hook the encoder path
+never calls, so those objects draw nothing under `run(scene:)`.
+
+the plan is to pick one scene pipeline and make it real: honour
+`scene.clearColor` and `scene.cameraTransform` in the loop and route scene
+drawing through the canvas (or keep the encoder hook, with the docs and example
+updated to match). either way the two public properties should not be dead.
+
+### fullscreen window modes
+
+`Window` can go borderless, resize, minimize, maximize and grab the mouse, but it
+cannot go fullscreen: there is no `SDL_SetWindowFullscreen` call and no display
+enumeration. a game cannot offer exclusive or borderless-fullscreen, or query the
+current display. the plan is a fullscreen mode setter plus the display queries it
+needs.
+
+### scene-level collision queries
+
+`Math.Collision` is complete as math - circle/circle, circle/AABB, boundary tests,
+response - but nothing above it uses it: no collider on `GameObject`, no layers or
+masks, no broadphase. the roadmap leaves physics to the game, and that stays true,
+but the query layer is the part a game cannot easily borrow from math alone.
+
+the plan is a thin query layer over the existing math: an optional collider on
+`GameObject`, layer/mask filtering, and a broadphase (e.g. a uniform spatial hash)
+so overlap tests do not walk every pair. it stays a query layer - no solver, no
+integration, no velocity beyond what the game does with the results.
+
+### GPU smoke tests
+
+the test suite runs headless and covers math, events, assets, strokes and timing;
+nothing touches the GPU, which is only ever "verified on a machine with Vulkan
+1.3" by hand. the plan is a device-gated smoke test - create the device, build one
+pipeline, draw, read the target back and assert on a few pixels - skipped when no
+GPU is available so CI stays headless.
+
+### shader and content hot reload
+
+the compiled shaders are embedded through `ShaderLoader` and content is
+bundle-cached with no invalidation, so editing either during development means a
+restart. the plan is a development-only reload path (the `.slang`/`.spv` sources
+and the asset caches are the two places that assume immutability).
+
 ## already marked in the code
 
-- **continuous particle emission** - `ParticleSystem` is "burst-only for now":
+- **continuous particle emission**
+`ParticleSystem` is "burst-only for now":
   there is no emission rate, so no steady stream.
-- **frame-rate-independent particle drag** - the velocity decay factor is applied
+- **frame-rate-independent particle drag** the velocity decay factor is applied
   per frame rather than per second, so particle motion changes with frame rate.
   the code says so where it happens.
 
 ## deferred
 
-- **Windows** - the README calls it planned but currently deferred. SDL3, SoLoud
+- **Windows** the README calls it planned but currently deferred. SDL3, SoLoud
   and RmlUI all support it; the open question is dependencies, since the system
   libraries are reached through pkg-config shims.
 
 ## not planned
 
-- **3D rendering, and a separate sprite abstraction** - everything is triangles
-  through one pipeline.
-- **3D audio** - panning is the full extent of positioning.
+- **3D rendering** everything is triangles through one pipeline.
+- **sprites and image content** geometry is authored, not loaded: there is no
+  image decoder and no sprite abstraction, and none is planned. textures exist
+  only where the renderer makes them - offscreen render targets and the buffers
+  post-processing samples.
+- **3D audio** panning is the full extent of positioning.
 
-not listed above are the gameplay systems the consuming game owns today:
-physics, animation, tilemaps, save games. Prism ships none of them, and this
-roadmap does not change that.
+systems like physics, animation, tilemaps, and saving state of the game are intentionally left to the game implementation.
