@@ -1,0 +1,4 @@
+module CRmlUI {
+    header "rmlui_bridge.h"
+    export *
+}

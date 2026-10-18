@@ -1,0 +1,22 @@
+// asset data test (actually its just axis language before compilation)
+@version(4.3)
+
+const float TILE_SIZE = 32.0;
+
+template Ground {
+    bool wireframe = true;
+    bool filled = true;
+    bool closed = true;
+    short layer = 0;
+    color4 color = color4(0.2, 0.8, 0.2, 1.0);
+}
+
+polygon Shape: Ground {    
+    float2[] vertices = {
+        (1.2, 1.0),
+        (1.0, 1.0),
+        (0.0, -1.8),
+    };
+
+    float4 bounds = float4(0.0, 0.0, 10.5, 5.2) * TILE_SIZE;
+}

@@ -1,0 +1,6 @@
+module CSoloud [system] {
+    header "shim.h"
+    header "soloud_c.h"
+    header "soloud_bridge.h"
+    export *
+}

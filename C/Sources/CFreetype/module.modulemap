@@ -1,0 +1,5 @@
+module CFreetype [system] {
+    header "shim.h"
+    link "freetype"
+    export *
+}
