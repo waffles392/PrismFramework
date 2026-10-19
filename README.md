@@ -18,23 +18,30 @@ loop.
 the framework links against a few system libraries. they are not vendored, so
 install them first:
 
-| dependency | used for | Debian / Ubuntu | Homebrew |
-|---|---|---|---|
-| SDL3 | window, input, GPU device | **libsdl3-dev** | **sdl3** |
-| SDL3_image | texture loading (UI) | **libsdl3-image-dev** | **sdl3_image** |
-| FreeType | font rasterisation | **libfreetype-dev** | **freetype** |
-| Vulkan headers | GPU device features | **libvulkan-dev** | **vulkan-loader** |
+| dependency | used for | Debian / Ubuntu | Homebrew | vcpkg |
+|---|---|---|---|---|
+| SDL3 | window, input, GPU device | **libsdl3-dev** | **sdl3** | **sdl3** |
+| SDL3_image | texture loading (UI) | **libsdl3-image-dev** | **sdl3_image** | **sdl3-image** |
+| FreeType | font rasterisation | **libfreetype-dev** | **freetype** | **freetype** |
+| Vulkan headers | GPU device features | **libvulkan-dev** | **vulkan-loader** | [**Vulkan SDK**](https://vulkan.lunarg.com) |
+
+the shims in **C/Sources/** read **pkg-config** metadata, so every platform needs
+a `pkg-config` executable and a `.pc` file per library. that is automatic on
+Linux and macOS, and vcpkg supplies it on Windows - see
+[Building on Windows](#building-on-windows). the LunarG Vulkan SDK is the one
+that ships no `.pc` file, so that one is written by hand.
 
 Swift 6.2 or newer is required. RmlUI and SoLoud are vendored in-tree and
 compiled from source, so they need no package manager. the scripts under
 **Scripts/** are plain Python 3 (standard library only) and are only needed to
 refresh the vendored sources or rebuild the shaders.
 
-**Platforms:** developed and tested on Linux x86-64 with Vulkan 1.3. the device
-is currently created with a mandatory Vulkan/SPIR-V configuration, so
-macOS/Metal is not supported yet; the SDL3 GPU backend is written to allow a
-Metal path later, but none has been added. Windows support is planned but
-currently deferred.
+**Platforms:** developed and tested on Linux x86-64 with Vulkan 1.3. Windows x64
+is supported too, through the MSVC toolchain - see
+[Building on Windows](#building-on-windows). the device is currently created
+with a mandatory Vulkan/SPIR-V configuration, so macOS/Metal is not supported
+yet; the SDL3 GPU backend is written to allow a Metal path later, but none has
+been added.
 
 ## Build & test
 
@@ -71,6 +78,60 @@ overridable: **make check SLANGC=/path/to/slangc** or
 **make check PYTHON=/path/to/python3**. **make vendor** is only needed when
 refreshing a vendored source.
 
+## Building on Windows
+
+Swift on Windows uses the **MSVC** toolchain, so every library has to be built
+for MSVC. take SDL3 and SDL3_image from vcpkg or from SDL's official
+`SDL3-devel-*-VC.zip`, never the `-mingw.zip` or an MSYS2 package: import
+libraries built for MinGW will not link.
+
+[vcpkg](https://vcpkg.io) provides the pkg-config metadata the shims read. from
+wherever you cloned it (`VCPKG_ROOT`, conventionally `C:\vcpkg`):
+
+```bat
+vcpkg install sdl3 sdl3-image freetype --triplet x64-windows
+```
+
+that writes `sdl3.pc`, `sdl3-image.pc` and `freetype2.pc` into
+`%VCPKG_ROOT%\installed\x64-windows\lib\pkgconfig`. **Vulkan** is the exception:
+the LunarG SDK ships no `.pc` file, so write one of your own, pointing `prefix`
+at your SDK - say `C:\prism-pkgconfig\vulkan.pc`. Prism needs Vulkan's types
+only, so there is nothing to link and no `Libs:` line:
+
+```
+prefix=C:/VulkanSDK/1.4.363.0
+includedir=${prefix}/Include
+
+Name: vulkan
+Description: Vulkan headers (LunarG SDK)
+Version: 1.4.363.0
+Cflags: -I${includedir}
+```
+
+then build from an **x64 Native Tools Command Prompt for VS 2022**. the MSVC
+environment has to be set up first, or clang cannot find the Windows headers:
+
+```bat
+set PKG_CONFIG_PATH=%VCPKG_ROOT%\installed\x64-windows\lib\pkgconfig;C:\prism-pkgconfig
+swift build
+swift test
+```
+
+**pkgconf** is what provides the `pkg-config` executable here. SwiftPM looks for
+that exact name, so if only `pkgconf.exe` is on the path the metadata is
+silently ignored and the build fails later on a missing `SDL3/SDL.h` instead.
+
+the libraries are linked dynamically, so put their DLLs on the path before
+running anything - or copy them next to the executable:
+
+```bat
+set PATH=%PATH%;%VCPKG_ROOT%\installed\x64-windows\bin
+```
+
+the **Makefile** and **Scripts/** are Unix-flavoured; `swift build`,
+`swift test` and `python Scripts\vendor_soloud.py --check` cover the same ground
+from any shell.
+
 ## Using Prism in another package
 
 there are no external package dependencies, so Prism is consumed by URL:
@@ -105,7 +166,7 @@ PrismFramework/
 │   ├── Events/  Scene/  UI/  Core/
 │   └── Exports.swift      # the one public product: 'import Prism'
 ├── C/Sources/             # all non-Swift code (see C/README.md)
-│   ├── CSDL3/ CFreetype/             # pkg-config shims over the system libraries
+│   ├── CSDL3/ CSDL3Image/ CFreetype/ CVulkan/  # pkg-config shims over the system libraries
 │   ├── CRmlUI/ CSoloud/              # Prism's bridges to RmlUI and SoLoud
 │   ├── CRmlUiCore/                   # vendored RmlUI 6.3 (see 'make vendor')
 │   └── CSoloudCore/                  # vendored SoLoud (see 'make vendor')

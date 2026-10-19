@@ -89,20 +89,6 @@ checks `make check` runs would see a diff on every rebuild.
 URL. the least-breaking shape is an optional overlay - the store checks a mounted
 shard, then falls back to the bundle.
 
-### fixed-update phase
-
-the README and the module table both advertise "a fixed-timestep loop", but the
-run loop does not do that. `Prism.run(...)` calls `onUpdate(deltaTime)` with the
-raw frame delta, and `FixedTimestep` is a helper the game has to wire up itself;
-`TimeScheduler` is likewise driven by hand. a game that wants deterministic
-simulation therefore drops to the lowest-level `run` overload or steps time
-itself.
-
-the plan is to let the loop own it: a fixed step with an accumulator, an optional
-interpolation factor for the render phase, and `FixedTimestep`/`TimeScheduler`
-fed from the loop rather than the game. failing that, the README should stop
-claiming a fixed-timestep loop.
-
 ### scene run-loop wiring
 
 `Scene2D` exposes `clearColor` and `cameraTransform`, and its docs say the run
@@ -146,6 +132,19 @@ nothing touches the GPU, which is only ever "verified on a machine with Vulkan
 pipeline, draw, read the target back and assert on a few pixels - skipped when no
 GPU is available so CI stays headless.
 
+### Windows
+
+the C targets and `Package.swift` are Windows-correct - the Vulkan shim no longer
+links a loader that is called `vulkan-1` there, and SDL3_image gets a shim of its
+own so its headers no longer arrive by accident - and the README documents the
+vcpkg + pkg-config setup. what is missing is proof: the setup has not been run on
+a Windows machine yet, and a CI matrix building and testing on Linux, Windows and
+macOS would be what keeps it working afterwards.
+
+macOS is the awkward half of that matrix: it compiles, but the device is created
+with a mandatory Vulkan configuration, so there is nothing to run against until
+the Metal path in **Metal / macOS** lands.
+
 ### shader and content hot reload
 
 the compiled shaders are embedded through `ShaderLoader` and content is
@@ -161,12 +160,6 @@ and the asset caches are the two places that assume immutability).
 - **frame-rate-independent particle drag** the velocity decay factor is applied
   per frame rather than per second, so particle motion changes with frame rate.
   the code says so where it happens.
-
-## deferred
-
-- **Windows** the README calls it planned but currently deferred. SDL3, SoLoud
-  and RmlUI all support it; the open question is dependencies, since the system
-  libraries are reached through pkg-config shims.
 
 ## not planned
 
