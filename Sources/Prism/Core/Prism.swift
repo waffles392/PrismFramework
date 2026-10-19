@@ -456,7 +456,7 @@ public final class Prism {
                 FrameTickEvent(
                     deltaTime: deltaTime,
                     unscaledDeltaTime: time.unscaledDeltaTime,
-                    frameIndex: max(0, time.frameCount - 1)
+                    frameIndex: time.frameIndex
                 )
             )
 

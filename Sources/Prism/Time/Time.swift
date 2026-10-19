@@ -1,12 +1,16 @@
 import Foundation
 
-/// a frame clock backed by the system's monotonic uptime clock
+/// a frame clock backed by an injectable monotonic time source
 ///
 /// 'Time' tracks both scaled and unscaled time: 'deltaTime' and
 /// 'elapsedTime' reflect 'timeScale' (and freeze while paused),
 /// while unscaledDeltaTime and 'unscaledElapsedTime' always
 /// advance in real time. both variants are clamped to
 /// 'maximumDeltaTime'
+///
+/// the time source defaults to the system's monotonic uptime clock.
+/// inject another 'now' - for example a test double - to drive the
+/// clock deterministically
 ///
 /// 'Time' is '@unchecked Sendable' because it is mutated only from the main
 /// thread by the run loop
@@ -21,6 +25,11 @@ public final class Time: @unchecked Sendable {
     public private(set) var unscaledElapsedTime: Float = 0
     /// the number of frames observed by 'update()'
     public private(set) var frameCount: Int = 0
+    /// zero-based index of the most recent frame
+    ///
+    /// equals 'frameCount - 1' after an 'update()', and stays at zero
+    /// before the first update
+    public private(set) var frameIndex: Int = 0
 
     /// multiplier applied to 'deltaTime'
     public var timeScale: Float = 1
@@ -30,22 +39,29 @@ public final class Time: @unchecked Sendable {
     public var maximumDeltaTime: Float
 
     private var lastTime: Double
+    /// reads the current time, in seconds; injectable for testing
+    private let now: () -> Double
 
-    public init(maximumDeltaTime: Float = 0.25) {
+    public init(
+        maximumDeltaTime: Float = 0.25,
+        now: @escaping () -> Double = { ProcessInfo.processInfo.systemUptime }
+    ) {
         self.maximumDeltaTime = maximumDeltaTime
-        self.lastTime = ProcessInfo.processInfo.systemUptime
+        self.now = now
+        self.lastTime = now()
     }
 
     /// advances the clock by one frame and returns the scaled delta time
     @discardableResult
     public func update() -> Float {
-        let now: TimeInterval = ProcessInfo.processInfo.systemUptime
-        let rawDelta: Float = Float(max(0, now - lastTime))
+        let current: TimeInterval = now()
+        let rawDelta: Float = Float(max(0, current - lastTime))
 
-        lastTime = now
+        lastTime = current
         unscaledDeltaTime = min(rawDelta, maximumDeltaTime)
         unscaledElapsedTime += unscaledDeltaTime
         frameCount += 1
+        frameIndex = frameCount - 1
 
         if paused {
             deltaTime = 0
@@ -57,20 +73,15 @@ public final class Time: @unchecked Sendable {
         return deltaTime
     }
 
-    /// deprecated - scheduled timers are never ticked
-    ///
-    /// repeated callbacks are not driven by 'update()' yet, so this does nothing
-    @available(*, deprecated, message: "scheduled timers are not ticked yet")
-    public func every(interval: Float, callback: @escaping () -> Void) {}
-
     /// resets the clock to the initial state
     public func reset() {
-        lastTime = ProcessInfo.processInfo.systemUptime
+        lastTime = now()
 
         deltaTime = 0
         unscaledDeltaTime = 0
         elapsedTime = 0
         unscaledElapsedTime = 0
         frameCount = 0
+        frameIndex = 0
     }
 }
