@@ -28,18 +28,26 @@ public struct PrismConfig: Sendable {
     /// the bundle used to load assets. 'nil' uses the
     /// engine resource bundle
     public var bundle: Bundle?
+    /// fixed simulation step in seconds, or 'nil' for a variable timestep
+    public var fixedRate: Float?
+    /// the most fixed steps run per frame (a spiral-of-death cap)
+    public var maxFixedSteps: Int
 
     public init(
         title: String = "Prism",
         width: Int32 = 800,
         height: Int32 = 600,
         flags: WindowFlags = .recommended,
-        bundle: Bundle? = nil
+        bundle: Bundle? = nil,
+        fixedRate: Float? = nil,
+        maxFixedSteps: Int = 8
     ) {
         self.title = title
         self.width = width
         self.height = height
         self.flags = flags
         self.bundle = bundle
+        self.fixedRate = fixedRate
+        self.maxFixedSteps = maxFixedSteps
     }
 }

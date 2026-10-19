@@ -122,6 +122,24 @@ public final class Scene2D {
         }
     }
 
+    /// runs one fixed simulation step for all active objects
+    ///
+    /// the run loop calls this once per fixed step when a fixed rate is
+    /// configured, before 'update(deltaTime:)'
+    public func fixedUpdate(deltaTime: Float) {
+        guard isActive else { return }
+        // update root hierarchy
+        for child in root.children {
+            child.traverseFixedUpdate(deltaTime: deltaTime)
+        }
+        // update legacy collections
+        for collection in collections {
+            for object in collection.objects {
+                object.traverseFixedUpdate(deltaTime: deltaTime)
+            }
+        }
+    }
+
     /// prepares GPU geometry for all active objects (root hierarchy + collections)
     public func prepare(renderer: Renderer, frame: Frame) {
         guard isActive else { return }

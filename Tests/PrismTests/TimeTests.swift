@@ -73,3 +73,45 @@ import Testing
     #expect(time.frameIndex == 0)
     #expect(time.frameCount == 0)
 }
+
+@Test func timeReportsFixedStepsWhenConfigured() {
+    var current: Double = 0
+    let time = Time(maximumDeltaTime: 10, fixedRate: 0.25, now: { current })
+
+    current = 0.6
+    #expect(time.update() == 0.6)
+    #expect(time.fixedDeltaTime == 0.25)
+    #expect(time.fixedStepCount == 2)
+    #expect(abs(time.interpolationAlpha - 0.4) < 0.0001)
+
+    current = 0.8
+    #expect(time.update() == 0.2)
+    #expect(time.fixedStepCount == 1)
+    #expect(abs(time.interpolationAlpha - 0.2) < 0.0001)
+}
+
+@Test func timeWithoutFixedRateRunsNoSteps() {
+    var current: Double = 0
+    let time = Time(maximumDeltaTime: 10, now: { current })
+
+    current = 5
+    _ = time.update()
+    #expect(time.fixedDeltaTime == 0)
+    #expect(time.fixedStepCount == 0)
+    #expect(time.interpolationAlpha == 1)
+}
+
+@Test func timePauseDoesNotAdvanceFixedSteps() {
+    var current: Double = 0
+    let time = Time(maximumDeltaTime: 10, fixedRate: 0.25, now: { current })
+
+    time.paused = true
+    current = 1
+    #expect(time.update() == 0)
+    #expect(time.fixedStepCount == 0)
+    #expect(time.interpolationAlpha == 0)
+
+    time.reset()
+    #expect(time.fixedStepCount == 0)
+    #expect(time.interpolationAlpha == 1)
+}

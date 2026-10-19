@@ -136,6 +136,13 @@ open class GameObject {
     /// called once per frame, before drawing. override to update game logic
     open func update(deltaTime: Float) {}
 
+    /// called for each fixed simulation step, before 'update(_:)'
+    ///
+    /// only runs when the engine is configured with a fixed rate
+    /// ('PrismConfig.fixedRate'). put deterministic simulation here and use
+    /// 'update(_:)' for per-frame / interpolated work
+    open func fixedUpdate(deltaTime: Float) {}
+
     /// called once per frame to upload geometry to the GPU before rendering
     open func prepare(renderer: Renderer, frame: Frame) {}
 
@@ -152,6 +159,13 @@ open class GameObject {
         guard isActive else { return }
         update(deltaTime: deltaTime)
         for child in children { child.traverseUpdate(deltaTime: deltaTime) }
+    }
+
+    /// recursively runs a fixed step for this node and all active children
+    func traverseFixedUpdate(deltaTime: Float) {
+        guard isActive else { return }
+        fixedUpdate(deltaTime: deltaTime)
+        for child in children { child.traverseFixedUpdate(deltaTime: deltaTime) }
     }
 
     /// recursively prepares this node and all active children

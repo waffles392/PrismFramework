@@ -196,15 +196,27 @@ public final class FrameTickEvent: BaseEvent {
     public let unscaledDeltaTime: Float
     /// the engine's zero-based frame counter
     public let frameIndex: Int
+    /// the number of fixed simulation steps run this frame
+    ///
+    /// zero when the clock is variable-timestep
+    public let fixedStepCount: Int
+    /// the fraction of a fixed step accumulated since the last step
+    ///
+    /// in '[0, 1)' under a fixed rate, and '[1]' when variable-timestep
+    public let interpolationAlpha: Float
     public init(
         deltaTime: Float,
         unscaledDeltaTime: Float,
         frameIndex: Int,
+        fixedStepCount: Int = 0,
+        interpolationAlpha: Float = 1,
         timestamp: Float = 0
     ) {
         self.deltaTime = deltaTime
         self.unscaledDeltaTime = unscaledDeltaTime
         self.frameIndex = frameIndex
+        self.fixedStepCount = fixedStepCount
+        self.interpolationAlpha = interpolationAlpha
         super.init(timestamp: timestamp)
     }
 }
