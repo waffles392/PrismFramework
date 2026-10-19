@@ -43,6 +43,9 @@ build:
 test:
 	$(SWIFT) test
 
+lint:
+	$(SWIFT) format lint --recursive --configuration .swift-format Sources Tests
+
 run:
 	$(SWIFT) run --package-path $(SANDBOX) Sandbox
 
