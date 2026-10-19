@@ -6,6 +6,7 @@ Swift - nothing outside these directories includes a C or C++ header.
 | path | kind | notes |
 |---|---|---|
 | `Sources/CSDL3/` | system shim | `module.modulemap` + `shim.h` over `sdl3` (pkg-config). hand-written, 2 files. |
+| `Sources/CSDL3Image/` | system shim | same, over `sdl3-image`. nothing on the Swift side imports it; it exists so `CRmlUI`'s SDL3-GPU backend gets `<SDL3_image/SDL_image.h>` from pkg-config instead of from a default include path. |
 | `Sources/CFreetype/` | system shim | same, over `freetype2`. |
 | `Sources/CVulkan/` | system shim | same, over `vulkan`. types only, no API calls - see the shim's comment. |
 | `Sources/CRmlUI/` | hand-written + derived | Prism's C bridge (`rmlui_bridge.{cpp,h}`) and an RmlUI SDL3-GPU backend taken from RmlUI's `Backends/`. MIT - see [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). |

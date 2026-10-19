@@ -1,5 +1,8 @@
 module CVulkan [system] {
     header "shim.h"
-    link "vulkan"
+    // no 'link "vulkan"' here on purpose. the engine never calls the Vulkan
+    // API (see shim.h), so there is nothing that needs the loader at link
+    // time - and the name is not portable anyway: it is 'vulkan' on
+    // Linux/macOS but 'vulkan-1' on Windows. SDL loads the loader itself.
     export *
 }

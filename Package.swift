@@ -48,6 +48,20 @@ let package: Package = Package(
             ]
         ),
 
+        // SDL3_image has no Swift-side shim: the only C++ that includes it is
+        // CRmlUI's SDL3-GPU backend. it still needs a target of its own so the
+        // <SDL3_image/SDL_image.h> include path comes from pkg-config rather
+        // than from the header happening to sit on a default search path.
+        .systemLibrary(
+            name: "CSDL3Image",
+            path: "C/Sources/CSDL3Image",
+            pkgConfig: "sdl3-image",
+            providers: [
+                .brew(["sdl3_image"]),
+                .apt(["libsdl3-image-dev"]),
+            ]
+        ),
+
         .systemLibrary(
             name: "CFreetype",
             path: "C/Sources/CFreetype",
@@ -137,7 +151,7 @@ let package: Package = Package(
         // the engine (derived from RmlUI - see THIRD_PARTY_NOTICES.md).
         .target(
             name: "CRmlUI",
-            dependencies: ["CSDL3", "CFreetype", "CRmlUiCore"],
+            dependencies: ["CSDL3", "CSDL3Image", "CFreetype", "CRmlUiCore"],
             path: "C/Sources/CRmlUI",
             sources: [
                 "src/RmlUi_Renderer_SDL_GPU.cpp",
