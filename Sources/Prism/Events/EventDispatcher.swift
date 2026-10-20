@@ -52,7 +52,7 @@ public final class EventDispatcher {
 
     /// stamps published 'BaseEvent' subclasses with a
     /// timestamp (seconds since engine start)
-    public let timeProvider: @MainActor () -> Float
+    public let timeProvider: @MainActor () -> Double
 
     /// when 'true', every 'publish' logs the event and its
     /// handler count to stderr. wire this to
@@ -65,7 +65,7 @@ public final class EventDispatcher {
     ///   published events. defaults to a zero provider;
     ///   the engine passes 'time.elapsedTime'
     public init(
-        timeProvider: @MainActor @escaping () -> Float = { 0 }
+        timeProvider: @MainActor @escaping () -> Double = { 0 }
     ) {
         self.timeProvider = timeProvider
     }

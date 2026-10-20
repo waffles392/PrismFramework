@@ -33,6 +33,20 @@ import Testing
     _ = token2 // keep token2 alive
 }
 
+@MainActor
+@Test func eventDispatcherStampsEventsWithDoubleTimestamp() {
+    let dispatcher = EventDispatcher(timeProvider: { 1_000_000.000_001 })
+    var timestamp: Double = 0
+
+    let token = dispatcher.subscribe { (e: WindowResizedEvent) in
+        timestamp = e.timestamp
+    }
+    dispatcher.publish(WindowResizedEvent(width: 1024, height: 768))
+
+    #expect(timestamp == 1_000_000.000_001)
+    token.cancel()
+}
+
 @Test func inputActionMapQueries() {
     var map = InputActionMap(name: "Test")
     let fire = InputAction(name: "Fire", keys: [.space], mouseButtons: [.left])

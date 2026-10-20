@@ -29,7 +29,7 @@ public struct PrismConfig: Sendable {
     /// engine resource bundle
     public var bundle: Bundle?
     /// fixed simulation step in seconds, or 'nil' for a variable timestep
-    public var fixedRate: Float?
+    public var fixedRate: Double?
     /// the most fixed steps run per frame (a spiral-of-death cap)
     public var maxFixedSteps: Int
 
@@ -39,7 +39,7 @@ public struct PrismConfig: Sendable {
         height: Int32 = 600,
         flags: WindowFlags = .recommended,
         bundle: Bundle? = nil,
-        fixedRate: Float? = nil,
+        fixedRate: Double? = nil,
         maxFixedSteps: Int = 8
     ) {
         self.title = title

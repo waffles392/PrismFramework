@@ -4,7 +4,7 @@
 /// processes an event may set 'handled = true' to suppress later handlers
 public protocol EngineEvent: AnyObject {
     /// the event's creation timestamp in seconds since engine start
-    var timestamp: Float { get }
+    var timestamp: Double { get }
     /// when 'true', no further handlers will be invoked for this event
     var handled: Bool { get set }
 }
@@ -15,10 +15,10 @@ public protocol EngineEvent: AnyObject {
 /// with its 'timeProvider' on publish; events created directly carry
 /// the timestamp passed to 'init' (default '0')
 open class BaseEvent: EngineEvent {
-    public var timestamp: Float
+    public var timestamp: Double
     public var handled: Bool = false
 
-    public init(timestamp: Float = 0) {
+    public init(timestamp: Double = 0) {
         self.timestamp = timestamp
     }
 }

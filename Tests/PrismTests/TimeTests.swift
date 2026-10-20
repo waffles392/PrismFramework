@@ -33,6 +33,16 @@ import Testing
     #expect(time.elapsedTime == 0.75)
 }
 
+@Test func timeClampsScaledDeltaToMaximum() {
+    var current: Double = 0
+    let time = Time(maximumDeltaTime: 0.1, now: { current })
+
+    time.timeScale = 2
+    current = 1
+    #expect(time.update() == 0.1)
+    #expect(abs(time.elapsedTime - 0.1) < 0.0001)
+}
+
 @Test func timeScaleAndPauseLeaveUnscaledTimeAlone() {
     var current: Double = 0
     let time = Time(maximumDeltaTime: 10, now: { current })
@@ -85,9 +95,21 @@ import Testing
     #expect(abs(time.interpolationAlpha - 0.4) < 0.0001)
 
     current = 0.8
-    #expect(time.update() == 0.2)
+    #expect(abs(time.update() - 0.2) < 0.0001)
     #expect(time.fixedStepCount == 1)
     #expect(abs(time.interpolationAlpha - 0.2) < 0.0001)
+}
+
+@Test func elapsedTimeRetainsPrecisionOverLongSessions() {
+    var current: Double = 0
+    let time = Time(maximumDeltaTime: 1, now: { current })
+
+    for _ in 0..<100_000 {
+        current += 0.001
+        _ = time.update()
+    }
+
+    #expect(abs(time.elapsedTime - 100) < 0.000001)
 }
 
 @Test func timeWithoutFixedRateRunsNoSteps() {

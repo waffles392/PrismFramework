@@ -7,7 +7,7 @@ import Math
 public final class WindowResizedEvent: BaseEvent {
     public let width: Int
     public let height: Int
-    public init(width: Int, height: Int, timestamp: Float = 0) {
+    public init(width: Int, height: Int, timestamp: Double = 0) {
         self.width = width
         self.height = height
         super.init(timestamp: timestamp)
@@ -17,7 +17,7 @@ public final class WindowResizedEvent: BaseEvent {
 /// fired when the window is moved
 public final class WindowMovedEvent: BaseEvent {
     public let position: Vector2D
-    public init(position: Vector2D, timestamp: Float = 0) {
+    public init(position: Vector2D, timestamp: Double = 0) {
         self.position = position
         super.init(timestamp: timestamp)
     }
@@ -26,7 +26,7 @@ public final class WindowMovedEvent: BaseEvent {
 /// fired when the window gains or loses keyboard focus
 public final class WindowFocusedEvent: BaseEvent {
     public let focused: Bool
-    public init(focused: Bool, timestamp: Float = 0) {
+    public init(focused: Bool, timestamp: Double = 0) {
         self.focused = focused
         super.init(timestamp: timestamp)
     }
@@ -56,7 +56,7 @@ public final class WindowCloseEvent: BaseEvent {}
 public final class KeyPressedEvent: BaseEvent {
     public let key: Key
     public let isRepeat: Bool
-    public init(key: Key, isRepeat: Bool, timestamp: Float = 0) {
+    public init(key: Key, isRepeat: Bool, timestamp: Double = 0) {
         self.key = key
         self.isRepeat = isRepeat
         super.init(timestamp: timestamp)
@@ -66,7 +66,7 @@ public final class KeyPressedEvent: BaseEvent {
 /// fired when a key is released
 public final class KeyReleasedEvent: BaseEvent {
     public let key: Key
-    public init(key: Key, timestamp: Float = 0) {
+    public init(key: Key, timestamp: Double = 0) {
         self.key = key
         super.init(timestamp: timestamp)
     }
@@ -75,7 +75,7 @@ public final class KeyReleasedEvent: BaseEvent {
 /// fired for every text character produced by the keyboard
 public final class TextInputEvent: BaseEvent {
     public let text: String
-    public init(text: String, timestamp: Float = 0) {
+    public init(text: String, timestamp: Double = 0) {
         self.text = text
         super.init(timestamp: timestamp)
     }
@@ -87,7 +87,7 @@ public final class TextInputEvent: BaseEvent {
 public final class MouseMovedEvent: BaseEvent {
     public let position: Vector2D
     public let delta: Vector2D
-    public init(position: Vector2D, delta: Vector2D, timestamp: Float = 0) {
+    public init(position: Vector2D, delta: Vector2D, timestamp: Double = 0) {
         self.position = position
         self.delta = delta
         super.init(timestamp: timestamp)
@@ -98,7 +98,7 @@ public final class MouseMovedEvent: BaseEvent {
 public final class MouseButtonPressedEvent: BaseEvent {
     public let button: MouseButton
     public let position: Vector2D
-    public init(button: MouseButton, position: Vector2D, timestamp: Float = 0) {
+    public init(button: MouseButton, position: Vector2D, timestamp: Double = 0) {
         self.button = button
         self.position = position
         super.init(timestamp: timestamp)
@@ -109,7 +109,7 @@ public final class MouseButtonPressedEvent: BaseEvent {
 public final class MouseButtonReleasedEvent: BaseEvent {
     public let button: MouseButton
     public let position: Vector2D
-    public init(button: MouseButton, position: Vector2D, timestamp: Float = 0) {
+    public init(button: MouseButton, position: Vector2D, timestamp: Double = 0) {
         self.button = button
         self.position = position
         super.init(timestamp: timestamp)
@@ -119,7 +119,7 @@ public final class MouseButtonReleasedEvent: BaseEvent {
 /// fired when the mouse wheel is scrolled
 public final class MouseWheelEvent: BaseEvent {
     public let delta: Vector2D
-    public init(delta: Vector2D, timestamp: Float = 0) {
+    public init(delta: Vector2D, timestamp: Double = 0) {
         self.delta = delta
         super.init(timestamp: timestamp)
     }
@@ -131,7 +131,7 @@ public final class MouseWheelEvent: BaseEvent {
 public final class GamepadConnectedEvent: BaseEvent {
     /// the SDL joystick instance ID of the gamepad
     public let gamepadID: Int32
-    public init(gamepadID: Int32, timestamp: Float = 0) {
+    public init(gamepadID: Int32, timestamp: Double = 0) {
         self.gamepadID = gamepadID
         super.init(timestamp: timestamp)
     }
@@ -141,7 +141,7 @@ public final class GamepadConnectedEvent: BaseEvent {
 public final class GamepadDisconnectedEvent: BaseEvent {
     /// the SDL joystick instance ID of the gamepad
     public let gamepadID: Int32
-    public init(gamepadID: Int32, timestamp: Float = 0) {
+    public init(gamepadID: Int32, timestamp: Double = 0) {
         self.gamepadID = gamepadID
         super.init(timestamp: timestamp)
     }
@@ -157,7 +157,7 @@ public final class GamepadButtonEvent: BaseEvent {
         gamepadID: Int32,
         button: GamepadButton,
         isDown: Bool,
-        timestamp: Float = 0
+        timestamp: Double = 0
     ) {
         self.gamepadID = gamepadID
         self.button = button
@@ -177,7 +177,7 @@ public final class GamepadAxisEvent: BaseEvent {
         gamepadID: Int32,
         axis: GamepadAxis,
         value: Float,
-        timestamp: Float = 0
+        timestamp: Double = 0
     ) {
         self.gamepadID = gamepadID
         self.axis = axis
@@ -191,9 +191,9 @@ public final class GamepadAxisEvent: BaseEvent {
 /// fired once per frame by the engine run loop
 public final class FrameTickEvent: BaseEvent {
     /// scaled delta time of this frame
-    public let deltaTime: Float
+    public let deltaTime: Double
     /// raw delta time of this frame (ignores timeScale and pause)
-    public let unscaledDeltaTime: Float
+    public let unscaledDeltaTime: Double
     /// the engine's zero-based frame counter
     public let frameIndex: Int
     /// the number of fixed simulation steps run this frame
@@ -203,14 +203,14 @@ public final class FrameTickEvent: BaseEvent {
     /// the fraction of a fixed step accumulated since the last step
     ///
     /// in '[0, 1)' under a fixed rate, and '[1]' when variable-timestep
-    public let interpolationAlpha: Float
+    public let interpolationAlpha: Double
     public init(
-        deltaTime: Float,
-        unscaledDeltaTime: Float,
+        deltaTime: Double,
+        unscaledDeltaTime: Double,
         frameIndex: Int,
         fixedStepCount: Int = 0,
-        interpolationAlpha: Float = 1,
-        timestamp: Float = 0
+        interpolationAlpha: Double = 1,
+        timestamp: Double = 0
     ) {
         self.deltaTime = deltaTime
         self.unscaledDeltaTime = unscaledDeltaTime
@@ -223,9 +223,9 @@ public final class FrameTickEvent: BaseEvent {
 
 /// fired when 'Time.timeScale' changes
 public final class TimeScaleChangedEvent: BaseEvent {
-    public let oldValue: Float
-    public let newValue: Float
-    public init(oldValue: Float, newValue: Float, timestamp: Float = 0) {
+    public let oldValue: Double
+    public let newValue: Double
+    public init(oldValue: Double, newValue: Double, timestamp: Double = 0) {
         self.oldValue = oldValue
         self.newValue = newValue
         super.init(timestamp: timestamp)
@@ -248,7 +248,7 @@ public final class InputActionTriggeredEvent: BaseEvent {
     }
     public let actionName: String
     public let state: TriggerState
-    public init(actionName: String, state: TriggerState, timestamp: Float = 0) {
+    public init(actionName: String, state: TriggerState, timestamp: Double = 0) {
         self.actionName = actionName
         self.state = state
         super.init(timestamp: timestamp)

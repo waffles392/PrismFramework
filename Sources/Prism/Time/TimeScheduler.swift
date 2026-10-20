@@ -35,9 +35,9 @@ public final class TimeScheduler {
     private struct Timer {
         let id: UInt64
         /// seconds remaining until the next fire
-        var deadline: Float
+        var deadline: Double
         /// repeating interval; '0' means one-shot
-        let interval: Float
+        let interval: Double
         /// number of times the timer has fired
         var tick: Int
         let handler: @MainActor (Int) -> Void
@@ -47,6 +47,8 @@ public final class TimeScheduler {
     /// IDs cancelled while a handler was executing; compacted on
     /// the next 'tick(deltaTime:)' so a handler can cancel itself
     private var cancelledIDs: Set<UInt64> = []
+    /// prevents a handler from re-entering 'tick(deltaTime:)'
+    private var isTicking = false
     private var nextID: UInt64 = 0
 
     public init() {}
@@ -60,8 +62,8 @@ public final class TimeScheduler {
     /// - Returns: A token that cancels the timer
     @discardableResult
     public func run(
-        after delay: Float,
-        every interval: Float = 0,
+        after delay: Double,
+        every interval: Double = 0,
         _ handler: @escaping @MainActor (Int) -> Void
     ) -> TimerToken {
         let id = nextID
@@ -94,12 +96,25 @@ public final class TimeScheduler {
     /// firing timers whose deadline passes. A repeating timer
     /// whose interval divides the frame delta fires more than
     /// once. does nothing when 'deltaTime <= 0' (pause-safe)
-    public func tick(deltaTime: Float) {
-        guard deltaTime > 0 else { return }
+    ///
+    /// timers scheduled from inside a handler are kept and begin
+    /// on the next tick. re-entrant calls to 'tick(deltaTime:)'
+    /// are ignored
+    public func tick(deltaTime: Double) {
+        guard deltaTime > 0, !isTicking else { return }
+        isTicking = true
+        defer { isTicking = false }
 
-        // fire order: earliest deadline first, then insertion
-        // order (stable for equal deadlines)
-        let ordered = timers.sorted { $0.deadline < $1.deadline }
+        // fire order: earliest deadline first, then insertion order.
+        // IDs increase monotonically, so sorting by ID makes equal
+        // deadlines deterministic instead of relying on sort stability
+        let scheduledIDs = Set(timers.map(\.id))
+        let ordered = timers.sorted {
+            if $0.deadline == $1.deadline {
+                return $0.id < $1.id
+            }
+            return $0.deadline < $1.deadline
+        }
         var remaining: [Timer] = []
 
         for var timer in ordered {
@@ -124,9 +139,11 @@ public final class TimeScheduler {
             }
         }
 
-        timers = remaining
-        if !cancelledIDs.isEmpty {
-            cancelledIDs.removeAll(keepingCapacity: true)
-        }
+        // timers created by a handler are not in 'ordered'; keep them.
+        // cancel() removes from 'timers', so a timer that was cancelled
+        // during this tick is not restored here either
+        let addedDuringTick = timers.filter { !scheduledIDs.contains($0.id) }
+        timers = remaining.filter { !cancelledIDs.contains($0.id) } + addedDuringTick
+        cancelledIDs.removeAll(keepingCapacity: true)
     }
 }

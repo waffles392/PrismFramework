@@ -6,7 +6,7 @@
 ///
 /// ```swift
 /// var clock = FixedTimestep(rate: 1.0 / 120)
-/// func update(deltaTime: Float) {
+/// func update(deltaTime: Double) {
 ///     let steps = clock.step(deltaTime: deltaTime)
 ///     for _ in 0..<steps { fixedUpdate(clock.rate) }
 ///     let t = clock.alpha   // interpolate previous -> current
@@ -17,12 +17,12 @@
 /// 'step' below 'rate', so 'alpha' stays in '[0, 1)'
 public struct FixedTimestep {
     /// seconds per fixed step (1/120 ~= 0.00833)
-    public let rate: Float
+    public let rate: Double
     /// the most fixed steps a single 'step(deltaTime:)' will run
     public let maxSteps: Int
-    private var accumulator: Float = 0
+    private var accumulator: Double = 0
 
-    public init(rate: Float = 1 / 120, maxSteps: Int = 8) {
+    public init(rate: Double = 1 / 120, maxSteps: Int = 8) {
         precondition(rate > 0, "fixed rate must be positive")
         precondition(maxSteps > 0, "maxSteps must be positive")
 
@@ -35,7 +35,7 @@ public struct FixedTimestep {
     /// the remainder below one step is retained, so consecutive frames do
     /// not lose time. when the count reaches 'maxSteps' any backlog is
     /// dropped down to the remainder rather than spiralling
-    public mutating func step(deltaTime: Float) -> Int {
+    public mutating func step(deltaTime: Double) -> Int {
         accumulator += max(0, deltaTime)
         var steps = 0
 
@@ -53,7 +53,7 @@ public struct FixedTimestep {
     ///
     /// in '[0, 1)'. render code uses it to interpolate between the previous
     /// and current simulation states
-    public var alpha: Float { accumulator / rate }
+    public var alpha: Double { accumulator / rate }
 
     /// clears the accumulated fraction
     public mutating func reset() { accumulator = 0 }

@@ -69,7 +69,7 @@ public final class Prism {
     private var activeScene: Scene2D?
     private var isRunning = false
     private var closeEventPublished = false
-    private var lastTimeScale: Float = 1
+    private var lastTimeScale: Double = 1
     private var lastPaused = false
     private var lastWindowSize: (width: Int32, height: Int32) = (0, 0)
 
@@ -81,7 +81,7 @@ public final class Prism {
         height: Int32 = 600,
         flags: WindowFlags = .recommended,
         bundle: Bundle? = nil,
-        fixedRate: Float? = nil,
+        fixedRate: Double? = nil,
         maxFixedSteps: Int = 8
     ) {
         let window = Window(title: title, width: width, height: height, flags: flags)
@@ -403,18 +403,20 @@ public final class Prism {
     /// advances the clock, runs the fixed steps, ticks timers and publishes
     /// 'FrameTickEvent'; returns this frame's delta time
     private func advanceTime(onFixedUpdate: @MainActor (Float) -> Void) -> Float {
-        let deltaTime = time.update()
+        let timeDelta = time.update()
+        let deltaTime = Float(timeDelta)
+        let fixedDeltaTime = Float(time.fixedDeltaTime)
 
         // fixed steps run before update/draw so simulation stays deterministic
         for _ in 0..<time.fixedStepCount {
-            onFixedUpdate(time.fixedDeltaTime)
-            activeScene?.fixedUpdate(deltaTime: time.fixedDeltaTime)
+            onFixedUpdate(fixedDeltaTime)
+            activeScene?.fixedUpdate(deltaTime: fixedDeltaTime)
         }
 
-        scheduler.tick(deltaTime: deltaTime)
+        scheduler.tick(deltaTime: timeDelta)
         events.publish(
             FrameTickEvent(
-                deltaTime: deltaTime,
+                deltaTime: timeDelta,
                 unscaledDeltaTime: time.unscaledDeltaTime,
                 frameIndex: time.frameIndex,
                 fixedStepCount: time.fixedStepCount,
@@ -459,7 +461,7 @@ public final class Prism {
             postProcessor.draw(
                 frame: frame,
                 settings: postProcessing,
-                elapsedTime: time.elapsedTime
+                elapsedTime: Float(time.elapsedTime)
             )
         } catch {
             print("[prism] frame skipped: \(error)")
