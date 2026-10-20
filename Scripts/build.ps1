@@ -55,11 +55,12 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $RepoRoot
 
-$InstallRoot = Join-Path $RepoRoot "vcpkg_installed"
+$Triplet = "x64-windows"
+$InstallBase = Join-Path $RepoRoot "vcpkg_installed"
+$InstallRoot = Join-Path $InstallBase $Triplet
 $PrismDir = Join-Path $RepoRoot ".prism"
 $ShimDir = Join-Path $PrismDir "bin"
 $PkgConfigDir = Join-Path $PrismDir "pkgconfig"
-$Triplet = "x64-windows"
 
 function Write-Step([string]$Message) {
     Write-Host ""
