@@ -1,0 +1,102 @@
+# Builds Prism on Windows with the supported MSVC + vcpkg toolchain.
+#
+# The Windows runner images do not ship Swift, so the toolchain is installed
+# first. Scripts/build.ps1 then imports the Visual Studio environment, installs
+# the dependencies from vcpkg.json, wires up pkg-config, and runs 'swift build'.
+#
+# The last step removes everything the job generated so a runner never keeps
+# toolchain installers, build products, or vcpkg scratch data around.
+
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Package.swift"
+      - "Sources/**"
+      - "C/**"
+      - "Tests/**"
+      - "Scripts/build.ps1"
+      - "vcpkg.json"
+      - ".github/workflows/windows-build.yml"
+  pull_request:
+    paths:
+      - "Package.swift"
+      - "Sources/**"
+      - "C/**"
+      - "Tests/**"
+      - "Scripts/build.ps1"
+      - "vcpkg.json"
+      - ".github/workflows/windows-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Swift + MSVC
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    env:
+      # Keep vcpkg's binary archives between runs instead of rebuilding
+      # SDL3, SDL3_image, FreeType, Vulkan headers, and pkgconf each time.
+      VCPKG_BINARY_SOURCES: 'clear;files,C:\vcpkg-cache,readwrite'
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
+      - name: Prepare vcpkg binary cache
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path 'C:\vcpkg-cache' | Out-Null
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v5
+        with:
+          path: C:\vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-
+
+      - name: Install Swift toolchain
+        uses: compnerd/gha-setup-swift@v0.5.1
+        with:
+          swift-version: swift-6.3.3-release
+          swift-build: 6.3.3-RELEASE
+          cache: true
+
+      - name: Show toolchain
+        shell: pwsh
+        run: swift --version
+
+      - name: Build Prism (MSVC + vcpkg)
+        shell: pwsh
+        run: .\Scripts\build.ps1 -Configuration release -Clean
+
+      - name: Cleanup
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'SilentlyContinue'
+
+          # Installer kept by gha-setup-swift for its own cache.
+          Remove-Item -Force -Recurse (Join-Path $env:RUNNER_TEMP 'installer.exe')
+
+          # Build products and generated setup, all gitignored.
+          foreach ($path in @('.build', 'vcpkg_installed', '.vcpkg', '.prism')) {
+            Remove-Item -Force -Recurse $path
+          }
+
+          # vcpkg scratch data. The binary cache at C:\vcpkg-cache is
+          # deliberately kept: actions/cache saves it after this step.
+          foreach ($path in @('C:\vcpkg\buildtrees', 'C:\vcpkg\packages', 'C:\vcpkg\downloads')) {
+            Remove-Item -Force -Recurse $path
+          }

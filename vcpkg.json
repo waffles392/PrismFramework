@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "prism",
+  "version-string": "26.10.18",
+  "dependencies": [
+    {
+      "name": "sdl3",
+      "features": [
+        "vulkan"
+      ]
+    },
+    {
+      "name": "sdl3-image",
+      "features": [
+        "png",
+        "jpeg"
+      ]
+    },
+    "freetype",
+    "vulkan-headers",
+    {
+      "name": "pkgconf",
+      "host": true
+    }
+  ]
+}

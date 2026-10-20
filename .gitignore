@@ -1,5 +1,8 @@
 .DS_Store
 .build/
+/.vcpkg/
+/vcpkg_installed/
+/.prism/
 /.vscode
 /Packages
 xcuserdata/
