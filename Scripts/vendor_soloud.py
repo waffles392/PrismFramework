@@ -20,6 +20,7 @@ to be plainly marked.
 
 usage:
   python3 Scripts/vendor_soloud.py           # refresh C/Sources/CSoloudCore
+  python3 Scripts/vendor_soloud.py --fetch   # download the pinned tarball into the cache
   python3 Scripts/vendor_soloud.py --check   # verify the vendored tree matches the pin
 """
 
@@ -381,13 +382,27 @@ def vendor(work):
 def main():
     arguments = sys.argv[1:]
     check_only = '--check' in arguments
+    fetch_only = '--fetch' in arguments
 
-    unknown = [a for a in arguments if a != '--check']
+    unknown = [a for a in arguments if a not in ('--check', '--fetch')]
     if unknown:
         sys.stderr.write("error: unknown argument '%s'\n" % unknown[0])
         return 2
+    if check_only and fetch_only:
+        sys.stderr.write("error: '--check' and '--fetch' are mutually exclusive\n")
+        return 2
 
     valid = sha256(TARBALL) == SOLOUD_SHA256
+    if fetch_only:
+        if not valid:
+            fetch()
+        if sha256(TARBALL) != SOLOUD_SHA256:
+            sys.stderr.write(
+                'error: SHA-256 mismatch for SoLoud %s tarball\n' % SOLOUD_COMMIT[:12]
+            )
+            return 1
+        return 0
+
     if not valid and check_only:
         sys.stderr.write(
             'error: cached tarball missing or checksum mismatch (%s)\n' % TARBALL

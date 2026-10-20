@@ -1,4 +1,5 @@
 # make vendor   refresh the vendored SoLoud and RmlUI source (pinned revisions)
+# make fetch    download the pinned vendor tarballs (no tree changes)
 # make shaders  rebuild SPIR-V from the .slang sources
 # make check    verify the vendored source and generated shaders are current
 # make build    compile the package
@@ -11,8 +12,8 @@
 # source, and 'make check' to confirm the compiled output is in sync.
 # RmlUI and SoLoud are compiled from vendored source by SwiftPM.
 #
-# 'vendor', 'shaders' and 'check' are Python 3 (standard library only). override
-# the interpreter with 'make ... PYTHON=/path/to/python3'.
+# 'vendor', 'fetch', 'shaders' and 'check' are Python 3 (standard library only).
+# override the interpreter with 'make ... PYTHON=/path/to/python3'.
 
 SWIFT ?= swift
 PYTHON ?= python3
@@ -21,7 +22,7 @@ PYTHON ?= python3
 # 'make run SANDBOX=/path/to/game'.
 SANDBOX ?= ../Sandbox
 
-.PHONY: all vendor shaders check build test run clean
+.PHONY: all vendor fetch shaders check build test run clean
 
 all: build
 
@@ -29,10 +30,14 @@ vendor:
 	$(PYTHON) Scripts/vendor_rmlui.py
 	$(PYTHON) Scripts/vendor_soloud.py
 
+fetch:
+	$(PYTHON) Scripts/vendor_rmlui.py --fetch
+	$(PYTHON) Scripts/vendor_soloud.py --fetch
+
 shaders:
 	$(PYTHON) Scripts/build_shaders.py
 
-check:
+check: fetch
 	$(PYTHON) Scripts/vendor_rmlui.py --check
 	$(PYTHON) Scripts/vendor_soloud.py --check
 	$(PYTHON) Scripts/build_shaders.py --check

@@ -42,7 +42,9 @@ URL consumption.
 
 ```sh
 python3 Scripts/vendor_rmlui.py          # re-fetch vendored RmlUI (tag + SHA-256)
+python3 Scripts/vendor_rmlui.py --fetch  # download the pinned tarball into the cache
 python3 Scripts/vendor_rmlui.py --check  # verify CRmlUiCore matches the pin
 python3 Scripts/vendor_soloud.py         # re-fetch vendored SoLoud (commit + SHA-256)
+python3 Scripts/vendor_soloud.py --fetch # download the pinned tarball into the cache
 python3 Scripts/vendor_soloud.py --check # verify CSoloudCore matches the pin
 ```
