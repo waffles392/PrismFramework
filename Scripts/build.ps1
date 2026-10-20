@@ -71,16 +71,17 @@ function Fail([string]$Message) {
 }
 
 function Find-VcpkgRoot([string]$Preferred) {
+    $candidates = @()
+
     if ($Preferred) {
         if (Test-Path -LiteralPath $Preferred -PathType Leaf) {
-            return Split-Path -Parent (Resolve-Path -LiteralPath $Preferred).Path
-        }
-        if (Test-Path -LiteralPath (Join-Path $Preferred "vcpkg.exe")) {
-            return (Resolve-Path -LiteralPath $Preferred).Path
+            $candidates += Split-Path -Parent (Resolve-Path -LiteralPath $Preferred).Path
+        } else {
+            $candidates += $Preferred
         }
     }
 
-    $candidates = @(
+    $candidates += @(
         $env:VCPKG_ROOT,
         $env:VCPKG_INSTALLATION_ROOT,
         "C:\vcpkg",
@@ -89,15 +90,37 @@ function Find-VcpkgRoot([string]$Preferred) {
         (Join-Path $RepoRoot ".vcpkg")
     )
 
+    # Manifest versioning needs versions/baseline.json from vcpkg's git
+    # history, so a vcpkg without .git (the copy bundled with Visual Studio,
+    # or an unzipped one) cannot be used. Skip it and bootstrap .vcpkg instead.
+    $seen = @{}
     foreach ($candidate in $candidates) {
-        if ($candidate -and (Test-Path -LiteralPath (Join-Path $candidate "vcpkg.exe"))) {
-            return (Resolve-Path -LiteralPath $candidate).Path
+        if (-not $candidate) { continue }
+        if (-not (Test-Path -LiteralPath (Join-Path $candidate "vcpkg.exe"))) { continue }
+
+        $resolved = (Resolve-Path -LiteralPath $candidate).Path
+        $key = $resolved.ToLowerInvariant()
+        if ($seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+
+        if (-not (Test-Path -LiteralPath (Join-Path $resolved ".git"))) {
+            Write-Host "warning: ignoring vcpkg at '$resolved' (not a git clone; versioning needs its history)" -ForegroundColor Yellow
+            continue
         }
+
+        return $resolved
     }
 
     $command = Get-Command vcpkg.exe -ErrorAction SilentlyContinue
     if ($command) {
-        return Split-Path -Parent $command.Source
+        $commandDir = Split-Path -Parent $command.Source
+        $key = $commandDir.ToLowerInvariant()
+        if (-not $seen.ContainsKey($key)) {
+            if (Test-Path -LiteralPath (Join-Path $commandDir ".git")) {
+                return $commandDir
+            }
+            Write-Host "warning: ignoring vcpkg at '$commandDir' (not a git clone; versioning needs its history)" -ForegroundColor Yellow
+        }
     }
 
     return $null
