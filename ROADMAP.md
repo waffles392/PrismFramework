@@ -136,10 +136,11 @@ GPU is available so CI stays headless.
 
 the C targets and `Package.swift` are Windows-correct - the Vulkan shim no longer
 links a loader that is called `vulkan-1` there, and SDL3_image gets a shim of its
-own so its headers no longer arrive by accident - and the README documents the
-vcpkg + pkg-config setup. what is missing is proof: the setup has not been run on
-a Windows machine yet, and a CI matrix building and testing on Linux, Windows and
-macOS would be what keeps it working afterwards.
+own so its headers no longer arrive by accident - and `Scripts/build.ps1`
+automates the MSVC + vcpkg + pkg-config setup from `vcpkg.json`. what is missing
+is proof: that script has not been run on a Windows machine yet, and a CI matrix
+building and testing on Linux, Windows and macOS would be what keeps it working
+afterwards.
 
 macOS is the awkward half of that matrix: it compiles, but the device is created
 with a mandatory Vulkan configuration, so there is nothing to run against until

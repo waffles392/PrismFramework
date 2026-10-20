@@ -27,9 +27,9 @@ install them first:
 
 the shims in **C/Sources/** read **pkg-config** metadata, so every platform needs
 a `pkg-config` executable and a `.pc` file per library. that is automatic on
-Linux and macOS, and vcpkg supplies it on Windows - see
-[Building on Windows](#building-on-windows). the LunarG Vulkan SDK is the one
-that ships no `.pc` file, so that one is written by hand.
+Linux and macOS. on Windows, **Scripts/build.ps1** gets both from vcpkg and
+writes the one `.pc` file vcpkg does not provide (Vulkan) - see
+[Building on Windows](#building-on-windows).
 
 Swift 6.2 or newer is required. RmlUI and SoLoud are vendored in-tree and
 compiled from source, so they need no package manager. the scripts under
@@ -67,6 +67,7 @@ the shaders and the vendored sources each have their own target:
 
 ```sh
 make shaders # compile .slang -> .spv (needs `slangc`)
+make fetch   # download the pinned RmlUI and SoLoud tarballs into the cache
 make vendor  # re-fetch the pinned RmlUI and SoLoud sources (SHA-256 verified)
 ```
 
@@ -75,62 +76,57 @@ committed, along with the **.slang** sources that produce them, and **make check
 fails if they drift from their sources. checking a shader means compiling it, so
 **make check** needs `slangc` as well, and both it and the Python interpreter are
 overridable: **make check SLANGC=/path/to/slangc** or
-**make check PYTHON=/path/to/python3**. **make vendor** is only needed when
-refreshing a vendored source.
+**make check PYTHON=/path/to/python3**. **make check** compares the vendored
+sources against the pinned upstream tarballs and downloads them into
+`~/.cache/prism` first if they are missing; **make fetch** does only that
+download. **make vendor** is only needed when refreshing a vendored source.
 
 ## Building on Windows
 
 Swift on Windows uses the **MSVC** toolchain, so every library has to be built
-for MSVC. take SDL3 and SDL3_image from vcpkg or from SDL's official
-`SDL3-devel-*-VC.zip`, never the `-mingw.zip` or an MSYS2 package: import
-libraries built for MinGW will not link.
+for MSVC. install these once:
 
-[vcpkg](https://vcpkg.io) provides the pkg-config metadata the shims read. from
-wherever you cloned it (`VCPKG_ROOT`, conventionally `C:\vcpkg`):
+- [Swift 6.2 or newer for Windows](https://www.swift.org/install/windows/)
+- **Visual Studio 2022** with the **Desktop development with C++** workload
+- **Git for Windows** (only needed if the script has to fetch vcpkg)
 
-```bat
-vcpkg install sdl3 sdl3-image freetype --triplet x64-windows
+then, from a normal PowerShell prompt in the repository:
+
+```powershell
+.\Scripts\build.ps1          # debug build
+.\Scripts\build.ps1 -Test    # build and run the tests
 ```
 
-that writes `sdl3.pc`, `sdl3-image.pc` and `freetype2.pc` into
-`%VCPKG_ROOT%\installed\x64-windows\lib\pkgconfig`. **Vulkan** is the exception:
-the LunarG SDK ships no `.pc` file, so write one of your own, pointing `prefix`
-at your SDK - say `C:\prism-pkgconfig\vulkan.pc`. Prism needs Vulkan's types
-only, so there is nothing to link and no `Libs:` line:
+`Scripts\build.cmd` runs the same script from `cmd.exe`.
 
-```
-prefix=C:/VulkanSDK/1.4.363.0
-includedir=${prefix}/Include
+the script does the setup that used to be manual:
 
-Name: vulkan
-Description: Vulkan headers (LunarG SDK)
-Version: 1.4.363.0
-Cflags: -I${includedir}
-```
+- imports the Visual Studio x64 environment, so an "x64 Native Tools" prompt is
+  not needed
+- finds vcpkg through `VCPKG_ROOT` / `-VcpkgRoot` / the usual locations, and
+  clones and bootstraps it into `.vcpkg/` if there is none
+- installs the dependencies declared in **vcpkg.json** into `vcpkg_installed/`
+  (SDL3 with Vulkan, SDL3_image with PNG/JPEG, FreeType, Vulkan headers and
+  `pkgconf`)
+- creates the `pkg-config.exe` name SwiftPM looks for from vcpkg's
+  `pkgconf.exe`
+- writes the Vulkan `.pc` file automatically, so the LunarG SDK is optional
+- puts the vcpkg DLL directory on `PATH` for the build and test run
+- runs `swift build`, plus `swift test` when `-Test` is passed
 
-then build from an **x64 Native Tools Command Prompt for VS 2022**. the MSVC
-environment has to be set up first, or clang cannot find the Windows headers:
+other options are `-Configuration release`, `-Clean` and `-NoBootstrap`.
+`-NoBootstrap` fails instead of cloning vcpkg when none is found.
 
-```bat
-set PKG_CONFIG_PATH=%VCPKG_ROOT%\installed\x64-windows\lib\pkgconfig;C:\prism-pkgconfig
-swift build
-swift test
-```
+the libraries are linked dynamically. the script sets `PATH` for its own run;
+to launch an executable afterwards, add `vcpkg_installed\x64-windows\bin` to
+`PATH` or copy the DLLs next to it.
 
-**pkgconf** is what provides the `pkg-config` executable here. SwiftPM looks for
-that exact name, so if only `pkgconf.exe` is on the path the metadata is
-silently ignored and the build fails later on a missing `SDL3/SDL.h` instead.
+**vcpkg.json** is also usable directly with `vcpkg install --triplet
+x64-windows`, but the script remains the supported path: it handles the MSVC
+environment and the `pkg-config` naming trap for you.
 
-the libraries are linked dynamically, so put their DLLs on the path before
-running anything - or copy them next to the executable:
-
-```bat
-set PATH=%PATH%;%VCPKG_ROOT%\installed\x64-windows\bin
-```
-
-the **Makefile** and **Scripts/** are Unix-flavoured; `swift build`,
-`swift test` and `python Scripts\vendor_soloud.py --check` cover the same ground
-from any shell.
+the **Makefile** is Unix-flavoured; on Windows use `Scripts\build.ps1` or plain
+`swift build` from a developer prompt. the Python scripts work from any shell.
 
 ## Using Prism in another package
 
@@ -171,9 +167,11 @@ PrismFramework/
 │   ├── CRmlUiCore/                   # vendored RmlUI 6.3 (see 'make vendor')
 │   └── CSoloudCore/                  # vendored SoLoud (see 'make vendor')
 ├── Tests/PrismTests/
-├── Scripts/               # vendor_rmlui.py, vendor_soloud.py, build_shaders.py
+├── Scripts/               # vendor_rmlui.py, vendor_soloud.py, build_shaders.py,
+│                          # build.ps1 / build.cmd (Windows)
 ├── Tools/dump_axb.py      # shows the content of .axb files
 ├── Makefile
+├── vcpkg.json             # Windows dependencies (used by Scripts/build.ps1)
 ├── ROADMAP.md             # what is planned next
 └── THIRD_PARTY_NOTICES.md
 ```

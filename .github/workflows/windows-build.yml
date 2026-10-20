@@ -1,10 +1,10 @@
-# Builds Prism on Windows with the supported MSVC + vcpkg toolchain.
+# builds Prism on Windows with the supported MSVC + vcpkg toolchain.
 #
-# The Windows runner images do not ship Swift, so the toolchain is installed
+# the Windows runner images do not ship Swift, so the toolchain is installed
 # first. Scripts/build.ps1 then imports the Visual Studio environment, installs
 # the dependencies from vcpkg.json, wires up pkg-config, and runs 'swift build'.
 #
-# The last step removes everything the job generated so a runner never keeps
+# the last step removes everything the job generated so a runner never keeps
 # toolchain installers, build products, or vcpkg scratch data around.
 
 name: Windows build
@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 90
 
     env:
-      # Keep vcpkg's binary archives between runs instead of rebuilding
+      # keep vcpkg's binary archives between runs instead of rebuilding
       # SDL3, SDL3_image, FreeType, Vulkan headers, and pkgconf each time.
       VCPKG_BINARY_SOURCES: 'clear;files,C:\vcpkg-cache,readwrite'
 
