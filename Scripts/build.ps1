@@ -272,6 +272,31 @@ try {
     $vcpkgExe = Install-Vcpkg $VcpkgRoot
     $env:VCPKG_DISABLE_METRICS = "1"
 
+    # Manifest versioning reads versions/baseline.json out of vcpkg's git
+    # history. The bootstrap clone is shallow, and an existing vcpkg may be
+    # too, so make sure the pinned baseline commit is present.
+    $manifestPath = Join-Path $RepoRoot "vcpkg.json"
+    if (Test-Path -LiteralPath $manifestPath) {
+        $baseline = (Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json).'builtin-baseline'
+        if ($baseline) {
+            if (-not (Test-Path -LiteralPath (Join-Path $VcpkgRoot ".git"))) {
+                Fail "vcpkg at '$VcpkgRoot' is not a git clone. Manifest versioning needs the git history; clone microsoft/vcpkg instead of using a zip."
+            }
+            if (-not (Get-Command git.exe -ErrorAction SilentlyContinue)) {
+                Fail "git.exe is required to fetch the vcpkg baseline '$baseline'."
+            }
+
+            & git.exe -C $VcpkgRoot cat-file -e "$baseline^{commit}" 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Step "Fetching vcpkg baseline $baseline"
+                & git.exe -C $VcpkgRoot fetch --depth 1 origin $baseline
+                if ($LASTEXITCODE -ne 0) {
+                    Fail "Could not fetch vcpkg baseline '$baseline'."
+                }
+            }
+        }
+    }
+
     Write-Step "Installing dependencies from vcpkg.json (this can take a while the first time)"
     & $vcpkgExe install --triplet $Triplet
     if ($LASTEXITCODE -ne 0) {
