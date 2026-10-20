@@ -1,9 +1,8 @@
-# hide spirv shaders from linguist
+# hide spirv shaders from linguistz
 *.spv binary linguist-generated=true
 
 # hide vendored libraries from lingust
-C/Sources/CRmlUiCore/** linguist-generated=true
-C/Sources/CSoloudCore/** linguist-generated=true
+C/** linguist-generated=true
 
 # hide scripts from lingust
 Scripts/** linguist-documentation
