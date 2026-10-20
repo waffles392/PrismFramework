@@ -1,0 +1,94 @@
+# builds and tests Prism on Linux with the system SDL3 packages.
+#
+# Ubuntu 26.04 is pinned deliberately: 'ubuntu-latest' is moving to 26.04,
+# and 24.04 does not ship libsdl3-dev. 26.04 ships Swift 6.4 and SDL3 3.4.x.
+#
+# the Slang version is pinned because 'make check' compares the committed
+# .spv files byte for byte, and a different compiler can produce different
+# bytes.
+
+name: Linux build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Package.swift"
+      - "Sources/**"
+      - "C/**"
+      - "Tests/**"
+      - "Scripts/**"
+      - "Makefile"
+      - ".swift-format"
+      - ".github/workflows/linux-build.yml"
+  pull_request:
+    paths:
+      - "Package.swift"
+      - "Sources/**"
+      - "C/**"
+      - "Tests/**"
+      - "Scripts/**"
+      - "Makefile"
+      - ".swift-format"
+      - ".github/workflows/linux-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Swift + SDL3
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+
+    env:
+      # the suite is headless; keep SDL from looking for a display or a
+      # sound device on the runner.
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
+      - name: Install system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libsdl3-dev \
+            libsdl3-image-dev \
+            libfreetype-dev \
+            libvulkan-dev
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          pkg-config --modversion sdl3 sdl3-image freetype2 vulkan
+
+      # release matches the Windows job; 'swift test' covers the debug build.
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Test
+        run: swift test
+
+      - name: Lint
+        run: make lint
+
+      # 'make check' needs slangc. pin the release that generated the
+      # committed .spv files.
+      - name: Verify vendored sources and shaders
+        run: |
+          curl -fsSL -o /tmp/slang.tar.gz \
+            https://github.com/shader-slang/slang/releases/download/v2026.10/slang-2026.10-linux-x86_64-glibc-2.28.tar.gz
+          mkdir -p "$HOME/slang"
+          tar -xzf /tmp/slang.tar.gz -C "$HOME/slang"
+          export PATH="$HOME/slang/bin:$PATH"
+          export LD_LIBRARY_PATH="$HOME/slang/lib:${LD_LIBRARY_PATH:-}"
+          slangc -v
+          make check
