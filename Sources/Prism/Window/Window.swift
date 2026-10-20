@@ -1,5 +1,11 @@
 import CSDL3
 
+/// SDL's event enum imports as UInt32 on Linux and as Int32 with MSVC,
+/// so normalize its raw value before comparing it with 'SDL_Event.type'.
+private extension SDL_EventType {
+    var rawUInt32: UInt32 { UInt32(truncatingIfNeeded: rawValue) }
+}
+
 // MARK: - SDL window flag constants
 
 /// SDL window creation/state flags (SDL_video.h)
@@ -202,7 +208,7 @@ public final class Window: @unchecked Sendable {
     /// it as a 'WindowCloseEvent')
     public func close() {
         var event = SDL_Event()
-        event.type = SDL_EVENT_QUIT.rawValue
+        event.type = SDL_EVENT_QUIT.rawUInt32
         event.quit.timestamp = SDL_GetTicksNS()
         SDL_PushEvent(&event)
     }

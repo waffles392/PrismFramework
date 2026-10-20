@@ -10,6 +10,12 @@ import UI
 import Window
 import CSDL3
 
+/// SDL's event enum imports as UInt32 on Linux and as Int32 with MSVC,
+/// so normalize its raw value before comparing it with 'SDL_Event.type'.
+private extension SDL_EventType {
+    var rawUInt32: UInt32 { UInt32(truncatingIfNeeded: rawValue) }
+}
+
 /// the engine entry point
 ///
 /// 'Prism' owns every subsystem and drives the frame loop. create one, then
@@ -558,23 +564,23 @@ public final class Prism {
     private func handleWindowEvents(_ sdlEvents: [SDL_Event]) {
         for event in sdlEvents {
             switch event.type {
-            case SDL_EVENT_WINDOW_MOVED.rawValue:
+            case SDL_EVENT_WINDOW_MOVED.rawUInt32:
                 events.publish(WindowMovedEvent(position: Vector2D(Float(event.window.data1), Float(event.window.data2))))
-            case SDL_EVENT_WINDOW_FOCUS_GAINED.rawValue:
+            case SDL_EVENT_WINDOW_FOCUS_GAINED.rawUInt32:
                 events.publish(WindowFocusedEvent(focused: true))
-            case SDL_EVENT_WINDOW_FOCUS_LOST.rawValue:
+            case SDL_EVENT_WINDOW_FOCUS_LOST.rawUInt32:
                 events.publish(WindowFocusedEvent(focused: false))
-            case SDL_EVENT_WINDOW_MINIMIZED.rawValue:
+            case SDL_EVENT_WINDOW_MINIMIZED.rawUInt32:
                 events.publish(WindowMinimizedEvent())
-            case SDL_EVENT_WINDOW_MAXIMIZED.rawValue:
+            case SDL_EVENT_WINDOW_MAXIMIZED.rawUInt32:
                 events.publish(WindowMaximizedEvent())
-            case SDL_EVENT_WINDOW_RESTORED.rawValue:
+            case SDL_EVENT_WINDOW_RESTORED.rawUInt32:
                 events.publish(WindowRestoredEvent())
-            case SDL_EVENT_WINDOW_SHOWN.rawValue:
+            case SDL_EVENT_WINDOW_SHOWN.rawUInt32:
                 events.publish(WindowShownEvent())
-            case SDL_EVENT_WINDOW_HIDDEN.rawValue:
+            case SDL_EVENT_WINDOW_HIDDEN.rawUInt32:
                 events.publish(WindowHiddenEvent())
-            case SDL_EVENT_WINDOW_CLOSE_REQUESTED.rawValue:
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED.rawUInt32:
                 requestShutdown()
             default:
                 break

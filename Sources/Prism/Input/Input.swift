@@ -1,6 +1,12 @@
 import CSDL3
 import Math
 
+/// SDL's event enum imports as UInt32 on Linux and as Int32 with MSVC,
+/// so normalize its raw value before comparing it with 'SDL_Event.type'.
+private extension SDL_EventType {
+    var rawUInt32: UInt32 { UInt32(truncatingIfNeeded: rawValue) }
+}
+
 /// polls SDL input and maintains frame-based keyboard, mouse,
 /// and gamepad state
 ///
@@ -63,54 +69,54 @@ public final class Input: @unchecked Sendable {
             rawOut.append(event)
 
             switch event.type {
-            case SDL_EVENT_QUIT.rawValue:
+            case SDL_EVENT_QUIT.rawUInt32:
                 events.append(.quit)
-            case SDL_EVENT_KEY_DOWN.rawValue:
+            case SDL_EVENT_KEY_DOWN.rawUInt32:
                 let key = Key(rawValue: Int32(event.key.scancode.rawValue))
                 keyboard.set(key, isDown: true)
                 events.append(.keyDown(key, isRepeat: event.key.repeat))
-            case SDL_EVENT_KEY_UP.rawValue:
+            case SDL_EVENT_KEY_UP.rawUInt32:
                 let key = Key(rawValue: Int32(event.key.scancode.rawValue))
                 keyboard.set(key, isDown: false)
                 events.append(.keyUp(key))
-            case SDL_EVENT_MOUSE_MOTION.rawValue:
+            case SDL_EVENT_MOUSE_MOTION.rawUInt32:
                 let position = Vector2D(event.motion.x, event.motion.y)
                 let delta = Vector2D(event.motion.xrel, event.motion.yrel)
                 mouse.move(to: position, delta: delta)
                 events.append(.mouseMoved(position: position, delta: delta))
-            case SDL_EVENT_MOUSE_BUTTON_DOWN.rawValue:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN.rawUInt32:
                 let position = Vector2D(event.button.x, event.button.y)
                 let button = MouseButton(sdlRawValue: event.button.button)
                 mouse.set(button, isDown: true)
                 events.append(.mouseButtonDown(button, position: position))
-            case SDL_EVENT_MOUSE_BUTTON_UP.rawValue:
+            case SDL_EVENT_MOUSE_BUTTON_UP.rawUInt32:
                 let position = Vector2D(event.button.x, event.button.y)
                 let button = MouseButton(sdlRawValue: event.button.button)
                 mouse.set(button, isDown: false)
                 events.append(.mouseButtonUp(button, position: position))
-            case SDL_EVENT_MOUSE_WHEEL.rawValue:
+            case SDL_EVENT_MOUSE_WHEEL.rawUInt32:
                 let amount = Vector2D(event.wheel.x, event.wheel.y)
                 mouse.addWheel(amount)
                 events.append(.mouseWheel(amount))
-            case SDL_EVENT_TEXT_INPUT.rawValue:
+            case SDL_EVENT_TEXT_INPUT.rawUInt32:
                 if let text = event.text.text {
                     events.append(.textInput(String(cString: text)))
                 }
-            case SDL_EVENT_WINDOW_MOUSE_ENTER.rawValue:
+            case SDL_EVENT_WINDOW_MOUSE_ENTER.rawUInt32:
                 mouse.setInsideWindow(true)
                 events.append(.mouseEnteredWindow)
-            case SDL_EVENT_WINDOW_MOUSE_LEAVE.rawValue:
+            case SDL_EVENT_WINDOW_MOUSE_LEAVE.rawUInt32:
                 mouse.setInsideWindow(false)
                 events.append(.mouseLeftWindow)
-            case SDL_EVENT_GAMEPAD_ADDED.rawValue:
+            case SDL_EVENT_GAMEPAD_ADDED.rawUInt32:
                 let id = event.jdevice.which
                 addGamepad(id)
                 events.append(.gamepadConnected(Int32(bitPattern: id)))
-            case SDL_EVENT_GAMEPAD_REMOVED.rawValue:
+            case SDL_EVENT_GAMEPAD_REMOVED.rawUInt32:
                 let id = event.jdevice.which
                 removeGamepad(id)
                 events.append(.gamepadDisconnected(Int32(bitPattern: id)))
-            case SDL_EVENT_GAMEPAD_BUTTON_DOWN.rawValue:
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN.rawUInt32:
                 let id = event.gbutton.which
                 if let button = GamepadButton(sdlRawValue: Int32(event.gbutton.button)) {
                     gamepadsByID[id]?.set(button, isDown: true)
@@ -118,7 +124,7 @@ public final class Input: @unchecked Sendable {
                         .gamepadButtonDown(Int32(bitPattern: id), button)
                     )
                 }
-            case SDL_EVENT_GAMEPAD_BUTTON_UP.rawValue:
+            case SDL_EVENT_GAMEPAD_BUTTON_UP.rawUInt32:
                 let id = event.gbutton.which
                 if let button = GamepadButton(sdlRawValue: Int32(event.gbutton.button)) {
                     gamepadsByID[id]?.set(button, isDown: false)
@@ -126,7 +132,7 @@ public final class Input: @unchecked Sendable {
                         .gamepadButtonUp(Int32(bitPattern: id), button)
                     )
                 }
-            case SDL_EVENT_GAMEPAD_AXIS_MOTION.rawValue:
+            case SDL_EVENT_GAMEPAD_AXIS_MOTION.rawUInt32:
                 let id = event.gaxis.which
                 if let axis = GamepadAxis(sdlRawValue: Int32(event.gaxis.axis)) {
                     let value = Float(event.gaxis.value) / 32768.0
