@@ -1,6 +1,10 @@
-# SPIR-V shaders
+# hide spirv shaders from linguist
 *.spv binary linguist-generated=true
 
-# Correct recursive directory exclusion for Linguist
+# hide vendored libraries from lingust
 C/Sources/CRmlUiCore/** linguist-generated=true
 C/Sources/CSoloudCore/** linguist-generated=true
+
+# hide scripts from lingust
+Scripts/** linguist-documentation
+*.ps1 linguist-detectable=false
