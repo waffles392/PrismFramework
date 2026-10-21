@@ -62,10 +62,14 @@ public final class EventTokens {
 
     /// the number of active tokens
     public var count: Int {
-        tokens.reduce(0) { $0 + ( $1.isActive ? 1 : 0) }
+        tokens.reduce(0) { $0 + ($1.isActive ? 1 : 0) }
     }
 
+    /// cancels every token and removes it from the collection
+    ///
+    /// equivalent to 'cancelAll()'. clearing the array without cancelling
+    /// would leave the dispatcher subscriptions alive
     public func removeAll() {
-        tokens.removeAll(keepingCapacity: true)
+        cancelAll()
     }
 }
