@@ -135,7 +135,7 @@ there are no external package dependencies, so Prism is consumed by URL:
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/waffles392/PrismFramework.git", exact: "26.10.18"),
+    .package(url: "https://github.com/waffles392/PrismFramework.git", exact: "26.10.21"),
 ],
 targets: [
     .target(name: "MyGame", dependencies: [
