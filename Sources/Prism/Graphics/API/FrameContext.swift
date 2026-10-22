@@ -29,8 +29,10 @@ public final class FrameContext: @unchecked Sendable {
             throw GPUError.deviceShutdown
         }
         
+        let frame = try Frame(device: deviceHandle, window: window)
         isActive = true
-        return try Frame(device: deviceHandle, window: window)
+
+        return frame
     }
     
     /// ends the current frame and presents it
