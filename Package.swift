@@ -204,6 +204,7 @@ let package: Package = Package(
             name: "Graphics",
             dependencies: ["Math", "CSDL3", "CVulkan"],
             path: "Sources/Prism/Graphics",
+            exclude: ["README.md"],
             resources: [.copy("Shaders")]
         ),
 
