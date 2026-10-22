@@ -90,9 +90,9 @@ open class GameObject {
     /// adds 'child' as a direct child of this object
     ///
     /// - If 'child' already has a parent, it is removed from it first
-    /// - Circular parenting is not permitted (asserted in debug builds)
+    /// - Self-parenting and cycles are ignored
     public func addChild(_ child: GameObject) {
-        assert(!isAncestor(of: child), "addChild: would create a cycle in the scene hierarchy")
+        guard child !== self, !child.isAncestor(of: self) else { return }
         if let oldParent = child.parent {
             oldParent.removeChild(child)
         }
