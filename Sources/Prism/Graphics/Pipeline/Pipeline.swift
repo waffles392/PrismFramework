@@ -187,17 +187,6 @@ public final class Pipeline: @unchecked Sendable {
         var info = SDL_GPUGraphicsPipelineCreateInfo()
         info.vertex_shader = vertexShader.handle
         info.fragment_shader = fragmentShader.handle
-        info.vertex_input_state.vertex_buffer_descriptions = withUnsafePointer(
-            to: &vertexBufferDesc
-        ) { $0 }
-        info.vertex_input_state.num_vertex_buffers = 1
-
-        let sdlAttributes = vertexAttributes.map { $0.sdlValue }
-        info.vertex_input_state.vertex_attributes = sdlAttributes.withUnsafeBufferPointer {
-            $0.baseAddress
-        }
-        info.vertex_input_state.num_vertex_attributes = UInt32(sdlAttributes.count)
-
         info.primitive_type = primitiveTopology.nativeValue
         info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL
         info.rasterizer_state.cull_mode = cullMode
@@ -206,14 +195,19 @@ public final class Pipeline: @unchecked Sendable {
         info.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1
         info.depth_stencil_state.enable_depth_test = enableDepthTest
         info.depth_stencil_state.enable_depth_write = enableDepthWrite
-        info.target_info.color_target_descriptions = colorTargets.withUnsafeBufferPointer {
-            $0.baseAddress
-        }
-        info.target_info.num_color_targets = UInt32(colorTargets.count)
         info.target_info.depth_stencil_format = depthFormat.nativeValue
         info.target_info.has_depth_stencil_target = enableDepthTest
 
-        guard let pipeline = SDL_CreateGPUGraphicsPipeline(deviceHandle, &info) else {
+        let sdlAttributes = vertexAttributes.map { $0.sdlValue }
+        let pipeline = Self.createPipeline(
+            deviceHandle: deviceHandle,
+            info: &info,
+            vertexBufferDesc: &vertexBufferDesc,
+            attributes: sdlAttributes,
+            colorTargets: colorTargets
+        )
+
+        guard let pipeline else {
             let error = String(cString: SDL_GetError())
             throw GPUError.pipelineCreationFailed(error)
         }
@@ -222,6 +216,34 @@ public final class Pipeline: @unchecked Sendable {
         self.resourceToken = device.registerResource { [weak device] in
             guard let deviceHandle = device?.handle else { return }
             SDL_ReleaseGPUGraphicsPipeline(deviceHandle, pipeline)
+        }
+    }
+
+    /// creates the SDL pipeline while the array and vertex-layout pointers are
+    /// still valid
+    ///
+    /// SDL reads these pointers during the call, so it must happen inside the
+    /// same closures that provide them
+    private static func createPipeline(
+        deviceHandle: OpaquePointer,
+        info: inout SDL_GPUGraphicsPipelineCreateInfo,
+        vertexBufferDesc: inout SDL_GPUVertexBufferDescription,
+        attributes: [SDL_GPUVertexAttribute],
+        colorTargets: [SDL_GPUColorTargetDescription]
+    ) -> OpaquePointer? {
+        withUnsafePointer(to: &vertexBufferDesc) { vertexBuffer in
+            attributes.withUnsafeBufferPointer { attributes in
+                colorTargets.withUnsafeBufferPointer { colorTargets in
+                    info.vertex_input_state.vertex_buffer_descriptions = vertexBuffer
+                    info.vertex_input_state.num_vertex_buffers = 1
+                    info.vertex_input_state.vertex_attributes = attributes.baseAddress
+                    info.vertex_input_state.num_vertex_attributes = UInt32(attributes.count)
+                    info.target_info.color_target_descriptions = colorTargets.baseAddress
+                    info.target_info.num_color_targets = UInt32(colorTargets.count)
+
+                    return SDL_CreateGPUGraphicsPipeline(deviceHandle, &info)
+                }
+            }
         }
     }
 
