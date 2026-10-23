@@ -58,7 +58,7 @@ public struct WindowFlags: OptionSet, Sendable {
     public static let startMaximized = WindowFlags(rawValue: 1 << 6)
 
     /// the engine default: vsync on, user-resizable
-    public static let recommended: WindowFlags = [.resizable, .highDPI]
+    public static let recommended: WindowFlags = [.resizable, .vsync, .highDPI]
 
     /// SDL creation flags. 'vsync', 'startMinimized' and
     /// 'startMaximized' are not SDL creation flags; the first is a GPU
