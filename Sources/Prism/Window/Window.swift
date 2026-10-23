@@ -1,40 +1,38 @@
 import CSDL3
 
-/// SDL's event enum imports as UInt32 on Linux and as Int32 with MSVC,
-/// so normalize its raw value before comparing it with 'SDL_Event.type'.
-private extension SDL_EventType {
-    var rawUInt32: UInt32 { UInt32(truncatingIfNeeded: rawValue) }
+/// SDL's event enum imports as `UInt32` on Linux and `Int32` with MSVC,
+/// so normalize it before comparing with `SDL_Event.type`
+extension SDL_EventType {
+    fileprivate var rawUInt32: UInt32 { UInt32(truncatingIfNeeded: rawValue) }
 }
 
 // MARK: - SDL window flag constants
 
-/// SDL window creation/state flags (SDL_video.h)
-/// the SDL headers expose these as '#define' macros on a
-/// 'Uint64' typedef, so they are re-declared here as
-/// raw 'SDL_WindowFlags' (UInt64) values
-private let sdlWindowHidden: SDL_WindowFlags = 0x0000000000000008
-private let sdlWindowBorderless: SDL_WindowFlags = 0x0000000000000010
-private let sdlWindowResizable: SDL_WindowFlags = 0x0000000000000020
-private let sdlWindowMinimized: SDL_WindowFlags = 0x0000000000000040
-private let sdlWindowMaximized: SDL_WindowFlags = 0x0000000000000080
-private let sdlWindowMouseGrabbed: SDL_WindowFlags = 0x0000000000000100
-private let sdlWindowInputFocus: SDL_WindowFlags = 0x0000000000000200
-private let sdlWindowHighPixelDensity: SDL_WindowFlags = 0x0000000000002000
-private let sdlWindowAlwaysOnTop: SDL_WindowFlags = 0x0000000100000000
+/// SDL window state flags from `SDL_video.h`
+///
+/// the headers expose these as `#define` macros over a `Uint64` typedef,
+/// so they are re-declared here as raw `SDL_WindowFlags` values
+private let sdlWindowHidden: SDL_WindowFlags = 0x0000_0000_0000_0008
+private let sdlWindowBorderless: SDL_WindowFlags = 0x0000_0000_0000_0010
+private let sdlWindowResizable: SDL_WindowFlags = 0x0000_0000_0000_0020
+private let sdlWindowMinimized: SDL_WindowFlags = 0x0000_0000_0000_0040
+private let sdlWindowMaximized: SDL_WindowFlags = 0x0000_0000_0000_0080
+private let sdlWindowMouseGrabbed: SDL_WindowFlags = 0x0000_0000_0000_0100
+private let sdlWindowInputFocus: SDL_WindowFlags = 0x0000_0000_0000_0200
+private let sdlWindowHighPixelDensity: SDL_WindowFlags = 0x0000_0000_0000_2000
+private let sdlWindowAlwaysOnTop: SDL_WindowFlags = 0x0000_0001_0000_0000
 
-/// 'SDL_WINDOWPOS_CENTERED' (SDL_video.h) - the
-/// macro does not cross the C boundary, so the
-/// computed value is used directly
-private let sdlWindowPosCentered: Int32 = 0x2FFF0000
+/// `SDL_WINDOWPOS_CENTERED` from `SDL_video.h`
+///
+/// the macro does not cross the C boundary, so its value is used directly
+private let sdlWindowPosCentered: Int32 = 0x2FFF_0000
 
 // MARK: - WindowFlags
 
-/// configuration flags for a 'Window'
+/// flags for creating a `Window`
 ///
-/// 'vsync' is applied through the GPU swapchain parameters (the engine
-/// calls 'GPU.setVsync(true)' when the flag is present); the remaining
-/// flags map directly onto SDL window creation flags or are applied
-/// immediately after creation
+/// `vsync` is applied by the GPU swapchain; the rest map to SDL creation
+/// flags or are applied right after the window exists
 public struct WindowFlags: OptionSet, Sendable {
     public let rawValue: Int
 
@@ -42,27 +40,28 @@ public struct WindowFlags: OptionSet, Sendable {
         self.rawValue = rawValue
     }
 
-    /// present the swapchain with vertical sync (via the GPU device)
+    /// present with vsync through the GPU swapchain
     public static let vsync = WindowFlags(rawValue: 1 << 0)
-    /// the window can be resized by the user
+    /// the user can resize the window
     public static let resizable = WindowFlags(rawValue: 1 << 1)
-    /// use a high pixel-density back buffer when the display supports it
+    /// use a high-density back buffer when the display supports it
     public static let highDPI = WindowFlags(rawValue: 1 << 2)
-    /// the window has no title bar or border
+    /// no title bar or border
     public static let borderless = WindowFlags(rawValue: 1 << 3)
-    /// the window stays above other windows (creation flag)
+    /// stay above other windows
     public static let alwaysOnTop = WindowFlags(rawValue: 1 << 4)
-    /// the window starts minimized (applied post-creation)
+    /// start minimized after creation
     public static let startMinimized = WindowFlags(rawValue: 1 << 5)
-    /// the window starts maximized (applied post-creation)
+    /// start maximized after creation
     public static let startMaximized = WindowFlags(rawValue: 1 << 6)
 
-    /// the engine default: vsync on, user-resizable
+    /// engine default: vsync on, user-resizable
     public static let recommended: WindowFlags = [.resizable, .vsync, .highDPI]
 
-    /// SDL creation flags. 'vsync', 'startMinimized' and
-    /// 'startMaximized' are not SDL creation flags; the first is a GPU
-    /// setting and the rest are applied after the window exists
+    /// the SDL creation flags
+    ///
+    /// `vsync`, `startMinimized` and `startMaximized` are not SDL creation
+    /// flags; vsync is a GPU setting and the last two are applied after creation
     var sdlCreationFlags: SDL_WindowFlags {
         var flags: SDL_WindowFlags = 0
         if contains(.resizable) { flags |= sdlWindowResizable }
@@ -73,29 +72,38 @@ public struct WindowFlags: OptionSet, Sendable {
     }
 }
 
-/// owns an SDL video subsystem and its application window
+/// owns the SDL video subsystem and the app window
 ///
-/// 'Window' is '@unchecked Sendable' because its SDL window handle and size
-/// are only touched from the main thread
-public final class Window: @unchecked Sendable {
-    public let title: String
+/// `Window` is `@MainActor` because SDL window and video calls must run on
+/// the main thread
+@MainActor
+public final class Window {
+    /// the current title
+    public private(set) var title: String
+    /// width in logical points
     public private(set) var width: Int32
+    /// height in logical points
     public private(set) var height: Int32
-    public private(set) var handle: OpaquePointer?
+    /// the underlying SDL handle
+    public let handle: OpaquePointer
 
-    /// the flags the window was created with
-    public private(set) var flags: WindowFlags
+    /// the flags the window was requested with
+    ///
+    /// not live state: `vsync` goes to the GPU swapchain, and
+    /// `startMinimized` / `startMaximized` are applied after creation
+    public let flags: WindowFlags
 
-    /// target frame rate consumed by the engine's frame pacing
-    /// 'nil' (the default) means unlimited; 'PrismEnvironment.lockFramerate'
-    /// overrides this when set
+    /// target frame rate for the engine's pacer
+    ///
+    /// `nil` means unlimited; `PrismEnvironment.lockFramerate` overrides it
     public var targetFPS: Int?
 
-    /// the drawable size in physical pixels (differs from 'width'/'height'
-    /// on high-DPI displays)
+    /// drawable size in physical pixels
+    ///
+    /// differs from `width` / `height` on high-DPI displays
     public private(set) var pixelSize: (width: Int32, height: Int32)
 
-    /// the window's display scale (e.g. 2.0 on a Retina display)
+    /// display scale (e.g. `2.0` on a Retina display)
     public private(set) var displayScale: Float
 
     public init(
@@ -123,14 +131,16 @@ public final class Window: @unchecked Sendable {
         self.handle = handle
         refreshSize()
 
-        // post-creation flags that SDL does not accept at creation time
+        // flags applied after creation
         if flags.contains(.startMinimized) { minimize() }
         if flags.contains(.startMaximized) { maximize() }
     }
 
-    /// re-reads the window size, pixel size and display scale from SDL
-    public func refreshSize() {
-        guard let handle else { return }
+    /// re-reads size, pixel size and display scale from SDL
+    ///
+    /// updates the cached metrics only; it does not publish
+    /// `WindowResizedEvent` - the engine calls it once per frame
+    package func refreshSize() {
         var width: Int32 = 0
         var height: Int32 = 0
         guard SDL_GetWindowSize(handle, &width, &height) else { return }
@@ -146,9 +156,8 @@ public final class Window: @unchecked Sendable {
         displayScale = Float(SDL_GetWindowDisplayScale(handle))
     }
 
-    /// sets the window size in logical points
+    /// sets the size in logical points
     public func setSize(width: Int32, height: Int32) {
-        guard let handle else { return }
         guard SDL_SetWindowSize(handle, width, height) else { return }
         self.width = width
         self.height = height
@@ -157,55 +166,44 @@ public final class Window: @unchecked Sendable {
 
     // MARK: - Sizing Constraints
 
-    /// sets the minimum size the user can resize the window to
+    /// sets the minimum size the user can resize to
     public func setMinimumSize(width: Int32, height: Int32) {
-        guard let handle else { return }
         SDL_SetWindowMinimumSize(handle, width, height)
     }
 
-    /// sets the maximum size the user can resize the window to
+    /// sets the maximum size the user can resize to
     public func setMaximumSize(width: Int32, height: Int32) {
-        guard let handle else { return }
         SDL_SetWindowMaximumSize(handle, width, height)
     }
 
     // MARK: - Position & Focus
 
     /// centers the window on the primary display
-    public func center() {
-        move(x: sdlWindowPosCentered, y: sdlWindowPosCentered)
-    }
+    public func center() { move(x: sdlWindowPosCentered, y: sdlWindowPosCentered) }
 
-    /// moves the window to the given position
-    public func move(x: Int32, y: Int32) {
-        guard let handle else { return }
-        SDL_SetWindowPosition(handle, x, y)
-    }
+    /// moves the window to `(x, y)`
+    public func move(x: Int32, y: Int32) { SDL_SetWindowPosition(handle, x, y) }
 
-    /// returns the window position in screen coordinates
+    /// window position in screen coordinates
     public var position: (x: Int32, y: Int32) {
-        guard let handle else { return (0, 0) }
         var x: Int32 = 0
         var y: Int32 = 0
         SDL_GetWindowPosition(handle, &x, &y)
         return (x, y)
     }
 
-    /// sets the window title
+    /// sets the title and updates the cached value when SDL accepts it
     public func setTitle(_ title: String) {
-        guard let handle else { return }
-        SDL_SetWindowTitle(handle, title)
+        guard SDL_SetWindowTitle(handle, title) else { return }
+        self.title = title
     }
 
     /// raises the window and gives it input focus
-    public func focus() {
-        guard let handle else { return }
-        SDL_RaiseWindow(handle)
-    }
+    public func focus() { SDL_RaiseWindow(handle) }
 
-    /// requests the window be closed (equivalent to the
-    /// window-manager close button; the engine loop observes
-    /// it as a 'WindowCloseEvent')
+    /// asks the window to close, like the window-manager close button
+    ///
+    /// the run loop sees it as a `WindowCloseEvent`
     public func close() {
         var event = SDL_Event()
         event.type = SDL_EVENT_QUIT.rawUInt32
@@ -214,86 +212,53 @@ public final class Window: @unchecked Sendable {
     }
 
     /// minimizes the window
-    public func minimize() {
-        guard let handle else { return }
-        SDL_MinimizeWindow(handle)
-    }
+    public func minimize() { SDL_MinimizeWindow(handle) }
 
-    /// restores a minimized or maximized window to its normal state
-    public func restore() {
-        guard let handle else { return }
-        SDL_RestoreWindow(handle)
-    }
+    /// restores a minimized or maximized window
+    public func restore() { SDL_RestoreWindow(handle) }
 
     /// maximizes the window
-    public func maximize() {
-        guard let handle else { return }
-        SDL_MaximizeWindow(handle)
-    }
+    public func maximize() { SDL_MaximizeWindow(handle) }
 
     /// shows a hidden window
-    public func show() {
-        guard let handle else { return }
-        SDL_ShowWindow(handle)
-    }
+    public func show() { SDL_ShowWindow(handle) }
 
-    /// hides the window (it remains alive and can be shown again)
-    public func hide() {
-        guard let handle else { return }
-        SDL_HideWindow(handle)
-    }
+    /// hides the window; it stays alive and can be shown again
+    public func hide() { SDL_HideWindow(handle) }
 
     // MARK: - State
 
-    /// whether the window currently has keyboard focus
-    public var isFocused: Bool {
-        (windowFlags & sdlWindowInputFocus) != 0
-    }
-
+    /// whether the window has keyboard focus
+    public var isFocused: Bool { (windowFlags & sdlWindowInputFocus) != 0 }
     /// whether the window is minimized
-    public var isMinimized: Bool {
-        (windowFlags & sdlWindowMinimized) != 0
-    }
-
+    public var isMinimized: Bool { (windowFlags & sdlWindowMinimized) != 0 }
     /// whether the window is maximized
-    public var isMaximized: Bool {
-        (windowFlags & sdlWindowMaximized) != 0
-    }
+    public var isMaximized: Bool { (windowFlags & sdlWindowMaximized) != 0 }
+    /// whether the window is visible
+    public var isVisible: Bool { (windowFlags & sdlWindowHidden) == 0 }
+    /// whether the mouse is grabbed
+    public var isMouseGrabbed: Bool { (windowFlags & sdlWindowMouseGrabbed) != 0 }
 
-    /// whether the window is visible (mapped and not hidden)
-    public var isVisible: Bool {
-        (windowFlags & sdlWindowHidden) == 0
-    }
-
-    /// whether the window has grabbed the mouse
-    public var isMouseGrabbed: Bool {
-        (windowFlags & sdlWindowMouseGrabbed) != 0
-    }
-
-    private var windowFlags: SDL_WindowFlags {
-        guard let handle else { return 0 }
-        return SDL_GetWindowFlags(handle)
-    }
+    private var windowFlags: SDL_WindowFlags { SDL_GetWindowFlags(handle) }
 
     // MARK: - Mouse Mode
 
-    /// enables or disables relative mouse mode for this window
-    /// (cursor hidden, motion deltas reported instead of positions)
+    /// whether relative mouse mode is on
+    public var isMouseRelativeMode: Bool { SDL_GetWindowRelativeMouseMode(handle) }
+
+    /// turns relative mouse mode on or off
+    ///
+    /// the cursor is hidden and motion comes in as deltas
     public func setMouseRelativeMode(_ enabled: Bool) {
-        guard let handle else { return }
         SDL_SetWindowRelativeMouseMode(handle, enabled)
     }
 
-    /// enables or disables mouse grab (cursor confined to the window)
-    public func setMouseGrab(_ grabbed: Bool) {
-        guard let handle else { return }
-        SDL_SetWindowMouseGrab(handle, grabbed)
-    }
+    /// turns mouse grab on or off (cursor stays inside the window)
+    public func setMouseGrab(_ grabbed: Bool) { SDL_SetWindowMouseGrab(handle, grabbed) }
 
-    deinit {
-        if let handle {
-            SDL_DestroyWindow(handle)
-        }
+    /// destroys the SDL window on the main actor
+    isolated deinit {
+        SDL_DestroyWindow(handle)
         SDL_QuitSubSystem(SDL_INIT_VIDEO)
     }
 }
