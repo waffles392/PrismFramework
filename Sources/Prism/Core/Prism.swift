@@ -87,7 +87,7 @@ public final class Prism {
         let window = Window(title: title, width: width, height: height, flags: flags)
         self.window = window
 
-        guard let windowHandle = window.handle else { fatalError("Failed to initialize Prism: the window has no SDL handle") }
+        let windowHandle = window.handle
 
         let renderer: Renderer
         do { renderer = try Renderer(window: windowHandle, windowOwner: window) } 
@@ -388,7 +388,8 @@ public final class Prism {
         inputManager.update()
         handleWindowEvents(rawEvents)
 
-        if let uiCtx = ui, let windowHandle = window.handle {
+        if let uiCtx = ui {
+            let windowHandle = window.handle
             for var sdlEvent in rawEvents {
                 withUnsafeMutablePointer(to: &sdlEvent) { ptr in
                     _ = uiCtx.processSDLEvent(
@@ -519,7 +520,8 @@ public final class Prism {
 
     /// creates the RmlUI context, or leaves 'ui' nil when it is unavailable
     private func setupUI(width: Int32, height: Int32) {
-        guard let device = renderer.deviceHandle, let windowHandle = window.handle else { return }
+        guard let device = renderer.deviceHandle else { return }
+        let windowHandle = window.handle
         guard UIContext.initialize(device: device, window: windowHandle) else {
             print("[prism] RmlUI initialization failed - UI overlay will be unavailable.")
             return
