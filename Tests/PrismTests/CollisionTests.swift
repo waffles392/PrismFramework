@@ -255,3 +255,55 @@ private func isClose(_ lhs: Float, _ rhs: Float, tolerance: Float = 0.0001) -> B
     #expect(isClose(velocityA, Vector2D(1, 0)))
     #expect(isClose(velocityB, .zero))
 }
+
+@Test func resolveCircleCircleLeavesSeparatingVelocitiesAlone() {
+    let a = CollisionCircle(center: .zero, radius: 1)
+    let b = CollisionCircle(center: Vector2D(1.5, 0), radius: 1)
+    let result = Collision.circleCircle(a, b)
+    var positionA = Vector2D.zero
+    var velocityA = Vector2D(-1, 0)
+    var positionB = Vector2D(1.5, 0)
+    var velocityB = Vector2D(1, 0)
+
+    CollisionResponse.resolveCircleCircle(
+        positionA: &positionA,
+        velocityA: &velocityA,
+        massA: 1,
+        positionB: &positionB,
+        velocityB: &velocityB,
+        massB: 1,
+        result: result,
+        restitution: 1
+    )
+
+    #expect(isClose(positionA, Vector2D(-0.25, 0)))
+    #expect(isClose(positionB, Vector2D(1.75, 0)))
+    #expect(isClose(velocityA, Vector2D(-1, 0)))
+    #expect(isClose(velocityB, Vector2D(1, 0)))
+}
+
+@Test func resolveCircleCircleMovesDynamicBodyAwayFromStaticBody() {
+    let a = CollisionCircle(center: .zero, radius: 1)
+    let b = CollisionCircle(center: Vector2D(1.5, 0), radius: 1)
+    let result = Collision.circleCircle(a, b)
+    var positionA = Vector2D.zero
+    var velocityA = Vector2D.zero
+    var positionB = Vector2D(1.5, 0)
+    var velocityB = Vector2D(-1, 0)
+
+    CollisionResponse.resolveCircleCircle(
+        positionA: &positionA,
+        velocityA: &velocityA,
+        massA: 0,
+        positionB: &positionB,
+        velocityB: &velocityB,
+        massB: 1,
+        result: result,
+        restitution: 1
+    )
+
+    #expect(isClose(positionA, .zero))
+    #expect(isClose(positionB, Vector2D(2, 0)))
+    #expect(isClose(velocityA, .zero))
+    #expect(isClose(velocityB, Vector2D(1, 0)))
+}
