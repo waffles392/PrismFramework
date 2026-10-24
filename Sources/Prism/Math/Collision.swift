@@ -48,7 +48,7 @@ public struct CollisionPolygon: Equatable, Sendable {
     
     public init(vertices: [Vector2D]) {
         self.vertices = vertices
-        // compute center as average of vertices
+        // compute the center as the average of the vertices
         var sum = Vector2D.zero
         for v in vertices { sum += v }
         self.center = vertices.isEmpty ? .zero : sum / Float(vertices.count)
@@ -59,7 +59,7 @@ public struct CollisionPolygon: Equatable, Sendable {
         self.vertices = vertices
     }
     
-    /// get world-space vertices
+    /// returns world-space vertices
     public func worldVertices(at position: Vector2D, rotation: Angle = .zero, scale: Float = 1.0) -> [Vector2D] {
         vertices.map { position + ($0 * scale).rotated(by: rotation) }
     }
@@ -71,7 +71,8 @@ public struct CollisionPolygon: Equatable, Sendable {
 public struct CollisionResult: Equatable, Sendable {
     public var collided: Bool
     public var penetration: Float
-    public var normal: Vector2D  // Points from A to B (push A along this to separate)
+    /// unit direction to push 'a' away from 'b'
+    public var normal: Vector2D
     public var contactPoint: Vector2D
     
     public static let noCollision = CollisionResult(
@@ -85,6 +86,7 @@ public struct CollisionResult: Equatable, Sendable {
 /// result of a boundary collision
 public struct BoundaryCollisionResult: Equatable, Sendable {
     public var collided: Bool
+    /// inward direction that pushes the body back inside
     public var normal: Vector2D
     public var penetration: Float
     public var contactPoint: Vector2D
@@ -100,6 +102,8 @@ public struct BoundaryCollisionResult: Equatable, Sendable {
 }
 
 /// which side of the boundary was hit
+///
+/// coordinates are y-down, so 'top' is 'min.y' and 'bottom' is 'max.y'
 public enum BoundarySide: Equatable, Sendable {
     case left, right, bottom, top, none
 }
@@ -110,23 +114,23 @@ public enum Collision {
     
     // MARK: - Circle vs Circle
     
-    /// check collision between two circles
+    /// checks for a collision between two circles
     public static func circleCircle(_ a: CollisionCircle, _ b: CollisionCircle) -> CollisionResult {
         let delta = b.center - a.center
         let distanceSquared = delta.lengthSquared
         let radiusSum = a.radius + b.radius
         let radiusSumSquared = radiusSum * radiusSum
         
-        if distanceSquared >= radiusSumSquared {
+        if radiusSum <= 0 || distanceSquared >= radiusSumSquared {
             return .noCollision
         }
         
         let distance = distanceSquared.squareRoot()
         let penetration = radiusSum - distance
         
-        // normal points from A to B
-        let normal = distance > Float.ulpOfOne ? delta / distance : Vector2D(1, 0)
-        let contactPoint = a.center + normal * a.radius
+        // push 'a' away from 'b'
+        let normal = distance > Float.ulpOfOne ? -delta / distance : Vector2D(1, 0)
+        let contactPoint = a.center - normal * a.radius
         
         return CollisionResult(
             collided: true,
@@ -138,9 +142,11 @@ public enum Collision {
     
     // MARK: - Circle vs AABB
     
-    /// check collision between circle and AABB
+    /// checks for a collision between a circle and an 'AABB'
     public static func circleAABB(_ circle: CollisionCircle, _ aabb: CollisionAABB) -> CollisionResult {
-        // find closest point on AABB to circle center
+        guard circle.radius > 0 else { return .noCollision }
+        
+        // find the closest point on the 'AABB' to the circle center
         let closestX = max(aabb.min.x, min(circle.center.x, aabb.max.x))
         let closestY = max(aabb.min.y, min(circle.center.y, aabb.max.y))
         let closestPoint = Vector2D(closestX, closestY)
@@ -152,25 +158,53 @@ public enum Collision {
             return .noCollision
         }
         
-        let distance = distanceSquared.squareRoot()
-        let penetration = circle.radius - distance
+        if distanceSquared > 0 {
+            let distance = distanceSquared.squareRoot()
+            // push the circle away from the 'AABB'
+            let normal = delta / distance
+            return CollisionResult(
+                collided: true,
+                penetration: circle.radius - distance,
+                normal: normal,
+                contactPoint: circle.center - normal * circle.radius
+            )
+        }
         
-        // normal points from AABB to circle
-        let normal = distance > Float.ulpOfOne ? delta.normalized : Vector2D(1, 0)
-        let contactPoint = circle.center - normal * circle.radius
+        // if the center is inside the 'AABB', push it out through the nearest face
+        var normal = Vector2D(-1, 0)
+        var distanceToFace = circle.center.x - aabb.min.x
         
+        let right = aabb.max.x - circle.center.x
+        if right < distanceToFace {
+            normal = Vector2D(1, 0)
+            distanceToFace = right
+        }
+        
+        let top = circle.center.y - aabb.min.y
+        if top < distanceToFace {
+            normal = Vector2D(0, -1)
+            distanceToFace = top
+        }
+        
+        let bottom = aabb.max.y - circle.center.y
+        if bottom < distanceToFace {
+            normal = Vector2D(0, 1)
+            distanceToFace = bottom
+        }
+        
+        distanceToFace = max(distanceToFace, 0)
         return CollisionResult(
             collided: true,
-            penetration: penetration,
+            penetration: circle.radius + distanceToFace,
             normal: normal,
-            contactPoint: contactPoint
+            contactPoint: circle.center + normal * distanceToFace
         )
     }
     
     // MARK: - Circle vs Boundary (circular boundary)
     
-    /// check collision between circle and circular boundary
-    /// returns collision if circle is OUTSIDE the boundary
+    /// checks for a collision between a circle and a circular boundary
+    /// returns a collision when the circle is outside the boundary
     public static func circleBoundary(_ circle: CollisionCircle, boundaryCenter: Vector2D, boundaryRadius: Float) -> BoundaryCollisionResult {
         let delta = circle.center - boundaryCenter
         let distance = delta.length
@@ -184,17 +218,17 @@ public enum Collision {
         let normal = distance > Float.ulpOfOne ? delta.normalized : Vector2D(1, 0)
         let contactPoint = boundaryCenter + normal * boundaryRadius
         
-        // determine boundary side
+        // determine the boundary side
         let side: BoundarySide
         if abs(delta.x) > abs(delta.y) {
             side = delta.x > 0 ? .right : .left
         } else {
-            side = delta.y > 0 ? .top : .bottom
+            side = delta.y > 0 ? .bottom : .top
         }
         
         return BoundaryCollisionResult(
             collided: true,
-            normal: -normal, // Points inward (pushes circle back inside)
+            normal: -normal, // points inward, pushing the circle back inside
             penetration: penetration,
             contactPoint: contactPoint,
             boundarySide: side
@@ -203,7 +237,7 @@ public enum Collision {
     
     // MARK: - AABB vs Boundary (rectangular boundary)
     
-    /// check collision between AABB and rectangular boundary
+    /// checks for a collision between an 'AABB' and a rectangular boundary
     public static func aabbBoundary(_ aabb: CollisionAABB, boundaryMin: Vector2D, boundaryMax: Vector2D) -> BoundaryCollisionResult {
         var maxPenetration: Float = 0
         var collisionNormal = Vector2D.zero
@@ -211,7 +245,7 @@ public enum Collision {
         var hitSide: BoundarySide = .none
         var collided = false
         
-        // check left
+        // check the left edge
         if aabb.min.x < boundaryMin.x {
             let penetration = boundaryMin.x - aabb.min.x
             if penetration > maxPenetration {
@@ -223,7 +257,7 @@ public enum Collision {
             }
         }
         
-        // check right
+        // check the right edge
         if aabb.max.x > boundaryMax.x {
             let penetration = aabb.max.x - boundaryMax.x
             if penetration > maxPenetration {
@@ -235,26 +269,26 @@ public enum Collision {
             }
         }
         
-        // check bottom
+        // check the top edge
         if aabb.min.y < boundaryMin.y {
             let penetration = boundaryMin.y - aabb.min.y
             if penetration > maxPenetration {
                 maxPenetration = penetration
                 collisionNormal = Vector2D(0, 1)
                 collisionPoint = Vector2D(aabb.center.x, boundaryMin.y)
-                hitSide = .bottom
+                hitSide = .top
                 collided = true
             }
         }
         
-        // check top
+        // check the bottom edge
         if aabb.max.y > boundaryMax.y {
             let penetration = aabb.max.y - boundaryMax.y
             if penetration > maxPenetration {
                 maxPenetration = penetration
                 collisionNormal = Vector2D(0, -1)
                 collisionPoint = Vector2D(aabb.center.x, boundaryMax.y)
-                hitSide = .top
+                hitSide = .bottom
                 collided = true
             }
         }
@@ -274,7 +308,7 @@ public enum Collision {
     
     // MARK: - Circle vs Boundary (rectangular)
     
-    /// check collision between circle and rectangular boundary
+    /// checks for a collision between a circle and a rectangular boundary
     public static func circleRectBoundary(_ circle: CollisionCircle, boundaryMin: Vector2D, boundaryMax: Vector2D) -> BoundaryCollisionResult {
         var maxPenetration: Float = 0
         var collisionNormal = Vector2D.zero
@@ -282,7 +316,7 @@ public enum Collision {
         var hitSide: BoundarySide = .none
         var collided = false
         
-        // check left
+        // check the left edge
         if circle.center.x - circle.radius < boundaryMin.x {
             let penetration = boundaryMin.x - (circle.center.x - circle.radius)
             if penetration > maxPenetration {
@@ -294,7 +328,7 @@ public enum Collision {
             }
         }
         
-        // check right
+        // check the right edge
         if circle.center.x + circle.radius > boundaryMax.x {
             let penetration = (circle.center.x + circle.radius) - boundaryMax.x
             if penetration > maxPenetration {
@@ -306,26 +340,26 @@ public enum Collision {
             }
         }
         
-        // check bottom
+        // check the top edge
         if circle.center.y - circle.radius < boundaryMin.y {
             let penetration = boundaryMin.y - (circle.center.y - circle.radius)
             if penetration > maxPenetration {
                 maxPenetration = penetration
                 collisionNormal = Vector2D(0, 1)
                 collisionPoint = Vector2D(circle.center.x, boundaryMin.y)
-                hitSide = .bottom
+                hitSide = .top
                 collided = true
             }
         }
         
-        // check top
+        // check the bottom edge
         if circle.center.y + circle.radius > boundaryMax.y {
             let penetration = (circle.center.y + circle.radius) - boundaryMax.y
             if penetration > maxPenetration {
                 maxPenetration = penetration
                 collisionNormal = Vector2D(0, -1)
                 collisionPoint = Vector2D(circle.center.x, boundaryMax.y)
-                hitSide = .top
+                hitSide = .bottom
                 collided = true
             }
         }
@@ -348,27 +382,27 @@ public enum Collision {
 
 public enum CollisionResponse {
     
-    /// reflect a velocity vector off a surface normal
+    /// reflects a velocity vector off a surface normal
     /// - Parameters:
     ///   - velocity: the incoming velocity
-    ///   - normal: the surface normal (pointing outward from surface)
-    ///   - restitution: bounciness (0 = no bounce, 1 = perfect bounce)
+    ///   - normal: the surface normal, pointing outward from the surface
+    ///   - restitution: bounciness ('0' = no bounce, '1' = perfect bounce)
     /// - Returns: the reflected velocity
     public static func reflect(_ velocity: Vector2D, normal: Vector2D, restitution: Float = 1.0) -> Vector2D {
         let dot = velocity.dot(normal)
-        if dot >= 0 { return velocity } // Moving away from surface
+        if dot >= 0 { return velocity } // moving away from the surface
         return velocity - normal * dot * (1 + restitution)
     }
     
-    /// resolve position overlap by pushing out along normal
+    /// resolves position overlap by pushing out along 'normal'
     public static func resolvePosition(_ position: inout Vector2D, penetration: Float, normal: Vector2D) {
         position += normal * penetration
     }
     
-    /// resolve position and velocity for a boundary collision
+    /// resolves position and velocity for a boundary collision
     /// - Parameters:
-    ///   - position: current position (will be corrected)
-    ///   - velocity: current velocity (will be reflected)
+    ///   - position: current position, corrected in place
+    ///   - velocity: current velocity, reflected when moving outward
     ///   - result: boundary collision result
     ///   - restitution: bounciness factor
     public static func resolveBoundary(
@@ -377,15 +411,20 @@ public enum CollisionResponse {
         result: BoundaryCollisionResult,
         restitution: Float
     ) {
-        if result.collided {
-            // push position back inside
-            position += result.normal * result.penetration
-            // reflect velocity
-            velocity = reflect(velocity, normal: -result.normal, restitution: restitution)
+        guard result.collided else { return }
+        
+        // push the position back inside
+        position += result.normal * result.penetration
+        
+        // only reflect a body that is still moving outward
+        let outward = -result.normal
+        let outwardSpeed = velocity.dot(outward)
+        if outwardSpeed > 0 {
+            velocity -= outward * outwardSpeed * (1 + restitution)
         }
     }
     
-    /// resolve collision between two circles
+    /// resolves a collision between two circles
     public static func resolveCircleCircle(
         positionA: inout Vector2D,
         velocityA: inout Vector2D,
@@ -398,24 +437,24 @@ public enum CollisionResponse {
     ) {
         guard result.collided else { return }
         
-        let totalMass = massA + massB
-        let massRatioA = massB / totalMass
-        let massRatioB = massA / totalMass
+        let inverseMassA = massA > 0 ? 1 / massA : 0
+        let inverseMassB = massB > 0 ? 1 / massB : 0
+        let inverseMassSum = inverseMassA + inverseMassB
+        guard inverseMassSum > 0 else { return }
         
         // position correction
-        positionA += result.normal * result.penetration * massRatioA
-        positionB -= result.normal * result.penetration * massRatioB
+        positionA += result.normal * result.penetration * (inverseMassA / inverseMassSum)
+        positionB -= result.normal * result.penetration * (inverseMassB / inverseMassSum)
         
         // velocity resolution
         let relativeVelocity = velocityA - velocityB
         let normalVelocity = relativeVelocity.dot(result.normal)
+        guard normalVelocity < 0 else { return }
         
-        if normalVelocity < 0 {
-            let impulse = -(1 + restitution) * normalVelocity / (1/massA + 1/massB)
-            let impulseVector = result.normal * impulse
-            velocityA += impulseVector / massA
-            velocityB -= impulseVector / massB
-        }
+        let impulse = -(1 + restitution) * normalVelocity / inverseMassSum
+        let impulseVector = result.normal * impulse
+        velocityA += impulseVector * inverseMassA
+        velocityB -= impulseVector * inverseMassB
     }
 }
 
@@ -424,8 +463,8 @@ public enum CollisionResponse {
 /// configuration for boundary collision behavior
 public struct BoundaryConfig: Equatable, Sendable {
     public var shape: BoundaryShape
-    public var restitution: Float  // Bounciness
-    public var friction: Float     // Tangential damping
+    public var restitution: Float  // bounciness
+    public var friction: Float     // tangential damping
     
     public init(shape: BoundaryShape, restitution: Float = 0.8, friction: Float = 0.0) {
         self.shape = shape
@@ -446,7 +485,7 @@ public enum BoundaryShape: Equatable, Sendable {
     }
 }
 
-/// boundary collision system - handles collision with world bounds
+/// boundary collision system that handles collisions with world bounds
 public struct BoundaryCollision {
     public let config: BoundaryConfig
     
@@ -454,7 +493,7 @@ public struct BoundaryCollision {
         self.config = config
     }
     
-    /// check and resolve collision for a circle-shaped entity
+    /// checks and resolves a collision for a circle-shaped entity
     public func checkAndResolve(
         position: inout Vector2D,
         velocity: inout Vector2D,
@@ -489,7 +528,7 @@ public struct BoundaryCollision {
         return result
     }
     
-    /// check collision without resolving (query only)
+    /// checks a collision without resolving it (query only)
     public func check(
         position: Vector2D,
         radius: Float
