@@ -59,8 +59,7 @@ private func rmluiAnimationEndTrampoline(
 
 @MainActor
 public final class UIDocument {
-
-    private let handle: RawHandle
+    private var handle: RawHandle
 
     // RmlUI stores a raw user_data pointer, so the Swift box has to stay
     // alive here for as long as the matching listener exists
@@ -80,20 +79,13 @@ public final class UIDocument {
     // MARK: - Lifecycle
 
     public func show() {
-        guard let ptr = handle.pointer else {
-            return
-        }
-
+        guard let ptr = handle.pointer else { return }
         rmlui_show_document(ptr)
     }
 
     public func close() {
-        guard let ptr = handle.pointer else {
-            return
-        }
-
-        let ids =
-            Array(animationEventBoxes.keys)
+        guard let ptr = handle.pointer else { return }
+        let ids = Array(animationEventBoxes.keys)
 
         for elementID in ids {
             _ = elementID.withCString {
@@ -110,9 +102,8 @@ public final class UIDocument {
         }
         clickEventBoxes.removeAll()
 
-        rmlui_close_document(
-            ptr
-        )
+        rmlui_close_document(ptr)
+        handle.pointer = nil
     }
 
     @discardableResult
