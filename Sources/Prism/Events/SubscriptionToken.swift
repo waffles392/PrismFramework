@@ -1,8 +1,14 @@
 /// an opaque token returned when subscribing to an event channel
 ///
-/// hold onto the token for as long as the subscription should remain
-/// active. when the token is deallocated, the subscription is
-/// automatically cancelled. you can also call 'cancel()' explicitly
+/// the subscription stays active while the token is retained. releasing the
+/// token does not cancel the subscription automatically - call 'cancel()' or
+/// add the token to an 'EventTokens' collection and call 'cancelAll()' during
+/// teardown
+///
+/// automatic cancellation from 'deinit' is not provided because the dispatcher
+/// publishes on the main actor and 'deinit' cannot safely call main-actor
+/// isolated cancellation. keep tokens in a '@MainActor' context and release
+/// them explicitly
 @MainActor
 public final class SubscriptionToken {
     private let cancellation: @MainActor () -> Void
@@ -23,22 +29,15 @@ public final class SubscriptionToken {
         isCancelled = true
         cancellation()
     }
-
-    deinit {
-        // cannot call MainActor-isolated cancellation directly from deinit
-        // users should call cancel() explicitly or store the token in a
-        // @MainActor context so deinit runs on the main actor
-    }
 }
 
 /// a collection of 'SubscriptionToken' values that cancels all
 /// of them at once - useful for tearing down a system's
 /// subscriptions together
 ///
-/// 'cancelAll()' is safe to call from any context on the
-/// main actor. because 'deinit' cannot reliably run on the
-/// main actor, do not rely on deinit for cancellation -
-/// call 'cancelAll()' explicitly during teardown
+/// 'cancelAll()' is safe to call from any context on the main actor. releasing
+/// the tokens does not cancel their subscriptions, so call 'cancelAll()'
+/// explicitly during teardown
 @MainActor
 public final class EventTokens {
     private var tokens: [SubscriptionToken] = []
