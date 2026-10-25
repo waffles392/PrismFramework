@@ -3,13 +3,30 @@ import Math
 
 // MARK: - Window Events
 
-/// fired when the window is resized
+/// fired when the window's logical size, drawable size or display scale changes
+///
+/// 'width' and 'height' are logical points; 'pixelWidth' and 'pixelHeight' are
+/// the drawable size in physical pixels, which differs on high-DPI displays
 public final class WindowResizedEvent: BaseEvent {
     public let width: Int
     public let height: Int
-    public init(width: Int, height: Int, timestamp: Double = 0) {
+    public let pixelWidth: Int
+    public let pixelHeight: Int
+    public let displayScale: Float
+
+    public init(
+        width: Int,
+        height: Int,
+        pixelWidth: Int,
+        pixelHeight: Int,
+        displayScale: Float,
+        timestamp: Double = 0
+    ) {
         self.width = width
         self.height = height
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+        self.displayScale = displayScale
         super.init(timestamp: timestamp)
     }
 }

@@ -18,7 +18,15 @@ import Testing
         handled = true
     }
 
-    dispatcher.publish(WindowResizedEvent(width: 1024, height: 768))
+    dispatcher.publish(
+        WindowResizedEvent(
+            width: 1024,
+            height: 768,
+            pixelWidth: 2048,
+            pixelHeight: 1536,
+            displayScale: 2
+        )
+    )
     #expect(windowWidth == 1024)
     #expect(!handled)
 
@@ -28,7 +36,15 @@ import Testing
     // testing unsubscription
     token1.cancel()
     windowWidth = 0
-    dispatcher.publish(WindowResizedEvent(width: 800, height: 600))
+    dispatcher.publish(
+        WindowResizedEvent(
+            width: 800,
+            height: 600,
+            pixelWidth: 1600,
+            pixelHeight: 1200,
+            displayScale: 2
+        )
+    )
     #expect(windowWidth == 0)  // should not have updated
 
     _ = token2  // keep token2 alive
@@ -42,10 +58,35 @@ import Testing
     let token = dispatcher.subscribe { (e: WindowResizedEvent) in
         timestamp = e.timestamp
     }
-    dispatcher.publish(WindowResizedEvent(width: 1024, height: 768))
+    dispatcher.publish(
+        WindowResizedEvent(
+            width: 1024,
+            height: 768,
+            pixelWidth: 2048,
+            pixelHeight: 1536,
+            displayScale: 2
+        )
+    )
 
     #expect(timestamp == 1_000_000.000_001)
     token.cancel()
+}
+
+@Test func windowResizedEventPreservesMetrics() {
+    let event = WindowResizedEvent(
+        width: 1024,
+        height: 768,
+        pixelWidth: 2048,
+        pixelHeight: 1536,
+        displayScale: 2
+    )
+
+    #expect(event.width == 1024)
+    #expect(event.height == 768)
+    #expect(event.pixelWidth == 2048)
+    #expect(event.pixelHeight == 1536)
+    #expect(event.displayScale == 2)
+    #expect(event.timestamp == 0)
 }
 
 @MainActor
@@ -59,7 +100,15 @@ import Testing
     }
     tokens.add(token)
 
-    dispatcher.publish(WindowResizedEvent(width: 1024, height: 768))
+    dispatcher.publish(
+        WindowResizedEvent(
+            width: 1024,
+            height: 768,
+            pixelWidth: 2048,
+            pixelHeight: 1536,
+            displayScale: 2
+        )
+    )
     #expect(received == 1)
     #expect(token.isActive)
     #expect(tokens.count == 1)
@@ -69,7 +118,15 @@ import Testing
     #expect(!token.isActive)
     #expect(tokens.count == 0)
 
-    dispatcher.publish(WindowResizedEvent(width: 800, height: 600))
+    dispatcher.publish(
+        WindowResizedEvent(
+            width: 800,
+            height: 600,
+            pixelWidth: 1600,
+            pixelHeight: 1200,
+            displayScale: 2
+        )
+    )
     #expect(received == 1)
 }
 

@@ -16,7 +16,15 @@ import Foundation
 /// // Publish (synchronous - all handlers fire immediately)
 /// events.publish(KeyPressedEvent(key: .space, isRepeat: false))
 /// // Queue for deferred dispatch (flushed at the top of each frame)
-/// events.queue(WindowResizedEvent(width: 1280, height: 720))
+/// events.queue(
+///     WindowResizedEvent(
+///         width: 1280,
+///         height: 720,
+///         pixelWidth: 1280,
+///         pixelHeight: 720,
+///         displayScale: 1
+///     )
+/// )
 /// events.flush()
 /// ```
 ///

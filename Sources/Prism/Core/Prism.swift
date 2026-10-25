@@ -71,7 +71,9 @@ public final class Prism {
     private var closeEventPublished = false
     private var lastTimeScale: Double = 1
     private var lastPaused = false
-    private var lastWindowSize: (width: Int32, height: Int32) = (0, 0)
+    private var lastWindowMetrics: WindowMetrics?
+    /// last logical size sent to the RmlUI context
+    private var lastUISize: (width: Int32, height: Int32) = (0, 0)
 
     // MARK: - Init
 
@@ -123,6 +125,10 @@ public final class Prism {
         renderer.printStartupBanner(title: title, width: width, height: height)
         renderer.device.forceShaderGuard = PrismEnvironment.forceShaderGuard
         setupUI(width: width, height: height)
+        // seed the snapshot from the current window state so the first frame
+        // does not publish a fake resize
+        window.refreshSize()
+        lastWindowMetrics = WindowMetrics(window: window)
     }
 
     /// creates an engine from a 'PrismConfig'
@@ -348,6 +354,7 @@ public final class Prism {
 
             window.refreshSize()
             syncUISize()
+            publishWindowResizeEventIfNeeded()
             publishTimeStateEvents()
 
             let deltaTime = advanceTime(onFixedUpdate: onFixedUpdate)
@@ -527,7 +534,7 @@ public final class Prism {
             return
         }
         ui = UIContext(name: "main", width: Int(width), height: Int(height))
-        lastWindowSize = (width, height)
+        lastUISize = (width, height)
     }
 
     // MARK: - Event helpers
@@ -592,6 +599,23 @@ public final class Prism {
         }
     }
 
+    /// publishes 'WindowResizedEvent' when the logical size, pixel size or
+    /// display scale changed this frame
+    private func publishWindowResizeEventIfNeeded() {
+        let metrics = WindowMetrics(window: window)
+        guard metrics != lastWindowMetrics else { return }
+        lastWindowMetrics = metrics
+        events.publish(
+            WindowResizedEvent(
+                width: metrics.width,
+                height: metrics.height,
+                pixelWidth: metrics.pixelWidth,
+                pixelHeight: metrics.pixelHeight,
+                displayScale: metrics.displayScale
+            )
+        )
+    }
+
     /// publishes time-scale and pause events when the clock changed this frame
     private func publishTimeStateEvents() {
         let timeScale = time.timeScale
@@ -627,13 +651,15 @@ public final class Prism {
     }
 
     /// keeps the RmlUI context in sync with the window size
+    ///
+    /// this only updates UI dimensions; 'WindowResizedEvent' is published by
+    /// 'publishWindowResizeEventIfNeeded()' so it does not depend on RmlUI
     private func syncUISize() {
         guard let uiCtx = ui else { return }
         let w = window.width, h = window.height
-        guard w != lastWindowSize.width || h != lastWindowSize.height else { return }
-        lastWindowSize = (w, h)
+        guard w != lastUISize.width || h != lastUISize.height else { return }
+        lastUISize = (w, h)
         uiCtx.setDimensions(width: Int(w), height: Int(h))
-        events.publish(WindowResizedEvent(width: Int(w), height: Int(h)))
     }
 
     private func teardownUI() {
