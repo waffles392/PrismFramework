@@ -1,8 +1,9 @@
-# builds Prism on Windows with the supported MSVC + vcpkg toolchain.
+# builds and tests Prism on Windows with the supported MSVC + vcpkg toolchain.
 #
 # the Windows runner images do not ship Swift, so the toolchain is installed
 # first. Scripts/build.ps1 then imports the Visual Studio environment, installs
-# the dependencies from vcpkg.json, wires up pkg-config, and runs 'swift build'.
+# the dependencies from vcpkg.json, wires up pkg-config, and runs 'swift build'
+# (and 'swift test' with -Test). a separate step lints Sources and Tests.
 #
 # the last step removes everything the job generated so a runner never keeps
 # toolchain installers, build products, or vcpkg scratch data around.
@@ -19,6 +20,7 @@ on:
       - "Tests/**"
       - "Scripts/build.ps1"
       - "vcpkg.json"
+      - ".swift-format"
       - ".github/workflows/windows-build.yml"
   pull_request:
     paths:
@@ -28,6 +30,7 @@ on:
       - "Tests/**"
       - "Scripts/build.ps1"
       - "vcpkg.json"
+      - ".swift-format"
       - ".github/workflows/windows-build.yml"
   workflow_dispatch:
 
@@ -48,6 +51,10 @@ jobs:
       # keep vcpkg's binary archives between runs instead of rebuilding
       # SDL3, SDL3_image, FreeType, Vulkan headers, and pkgconf each time.
       VCPKG_BINARY_SOURCES: 'clear;files,C:\vcpkg-cache,readwrite'
+      # the suite is headless; keep SDL from looking for a display or a
+      # sound device on the runner.
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
 
     steps:
       - name: Check out
@@ -76,9 +83,13 @@ jobs:
         shell: pwsh
         run: swift --version
 
-      - name: Build Prism (MSVC + vcpkg)
+      - name: Lint
         shell: pwsh
-        run: .\Scripts\build.ps1 -Configuration release -Clean
+        run: swift format lint --recursive --configuration .swift-format Sources Tests
+
+      - name: Build and test Prism (MSVC + vcpkg)
+        shell: pwsh
+        run: .\Scripts\build.ps1 -Configuration release -Clean -Test
 
       - name: Cleanup
         if: always()
