@@ -9,7 +9,7 @@ import Math
 @MainActor
 public final class Canvas2D {
     // MARK: - Configuration
-    
+
     public private(set) var size: Vector2D = .zero
     public var origin: Vector2D = .zero
     public var color: Color = Color(1, 1, 1, 1)
@@ -20,23 +20,26 @@ public final class Canvas2D {
     /// primitive still glows while 'emissive' is non-clear. the default,
     /// '.clear', disables glow
     public var emissive: Color = .clear
-    
+
     // MARK: - State
-    
+
     private var transformStack: [Matrix<Dim3, Dim3>] = [.identity]
     private var clipStack: [Rect2D] = []
     private var currentBlendMode: BlendMode = .normal
-    
+
     // MARK: - Batching
-    
+
     private struct Batch {
         var blendMode: BlendMode
         var vertices: [Vertex]
         var mesh: Mesh?
     }
-    
+
     private var batches: [Batch] = []
     private var currentBatchIndex = -1
+    /// number of batch slots used by the current frame; `batches` may keep
+    /// extra slots (and their meshes) around for reuse next frame
+    private var activeBatchCount = 0
 
     /// the ordered draw stream for the frame
     ///
@@ -50,25 +53,25 @@ public final class Canvas2D {
     }
 
     private var drawItems: [DrawItem] = []
-    
+
     // MARK: - Statistics
-    
+
     public private(set) var drawCallCount: Int = 0
     public private(set) var vertexCount: Int = 0
     public private(set) var triangleCount: Int = 0
     public private(set) var batchCount: Int = 0
-    
+
     // MARK: - Dependencies
-    
+
     private var renderer: Renderer?
     private var vertexShaderCode: Data = Data()
     private var fragmentShaderCode: Data = Data()
     private var surfaceCache: [BlendMode: Surface] = [:]
-    
+
     public init() {}
-    
+
     // MARK: - Configuration
-    
+
     /// configures the canvas with a renderer and the shader bytecode used for
     /// all 2D geometry. call this once after creating the renderer
     ///
@@ -83,8 +86,13 @@ public final class Canvas2D {
         self.vertexShaderCode = vertexShaderCode
         self.fragmentShaderCode = fragmentShaderCode
         self.surfaceCache.removeAll(keepingCapacity: true)
+        // any cached meshes belong to the previous renderer
+        batches.removeAll(keepingCapacity: true)
+        drawItems.removeAll(keepingCapacity: true)
+        currentBatchIndex = -1
+        activeBatchCount = 0
     }
-    
+
     private func surface(for blendMode: BlendMode) -> Surface {
         if let cached = surfaceCache[blendMode] {
             return cached
@@ -97,48 +105,48 @@ public final class Canvas2D {
         surfaceCache[blendMode] = surface
         return surface
     }
-    
+
     // MARK: - Transform Stack
-    
+
     public var currentTransform: Matrix<Dim3, Dim3> {
         transformStack.last ?? .identity
     }
-    
+
     public func pushTransform() {
         transformStack.append(currentTransform)
     }
-    
+
     public func popTransform() {
         guard transformStack.count > 1 else { return }
         transformStack.removeLast()
     }
-    
+
     public func translate(_ offset: Vector2D) {
         transformStack[transformStack.count - 1] = currentTransform * .translation(offset)
     }
-    
+
     public func rotate(_ angle: Angle) {
         transformStack[transformStack.count - 1] = currentTransform * .rotation(angle)
     }
-    
+
     public func scale(_ factor: Vector2D) {
         transformStack[transformStack.count - 1] = currentTransform * .scale(factor)
     }
-    
+
     public func setTransform(_ matrix: Matrix<Dim3, Dim3>) {
         transformStack[transformStack.count - 1] = matrix
     }
-    
+
     public func resetTransform() {
         transformStack[transformStack.count - 1] = .identity
     }
-    
+
     // MARK: - Clipping
-    
+
     private var currentClip: Rect2D? {
         clipStack.last
     }
-    
+
     public func pushClip(_ rect: Rect2D) {
         if let current = currentClip {
             clipStack.append(intersectRects(current, rect))
@@ -146,12 +154,12 @@ public final class Canvas2D {
             clipStack.append(rect)
         }
     }
-    
+
     public func popClip() {
         guard !clipStack.isEmpty else { return }
         clipStack.removeLast()
     }
-    
+
     public func intersectClip(_ rect: Rect2D) {
         guard let current = currentClip else {
             clipStack.append(rect)
@@ -159,34 +167,34 @@ public final class Canvas2D {
         }
         clipStack[clipStack.count - 1] = intersectRects(current, rect)
     }
-    
+
     private func intersectRects(_ a: Rect2D, _ b: Rect2D) -> Rect2D {
         let minX = max(a.min.x, b.min.x)
         let minY = max(a.min.y, b.min.y)
         let maxX = min(a.max.x, b.max.x)
         let maxY = min(a.max.y, b.max.y)
-        
+
         if minX >= maxX || minY >= maxY {
             return Rect2D(origin: .zero, size: .zero)
         }
-        
+
         return Rect2D(origin: Vector2D(minX, minY), size: Vector2D(maxX - minX, maxY - minY))
     }
-    
+
     // MARK: - Blend Mode
-    
+
     public func setBlendMode(_ mode: BlendMode) {
         guard mode != currentBlendMode else { return }
         flushIfNeeded(newMode: mode)
         currentBlendMode = mode
     }
-    
+
     public func resetBlendMode() {
         setBlendMode(.normal)
     }
-    
+
     // MARK: - Color
-    
+
     public func setColor(_ color: Color) {
         self.color = color
     }
@@ -194,33 +202,40 @@ public final class Canvas2D {
     public func setEmissive(_ emissive: Color) {
         self.emissive = emissive
     }
-    
+
     // MARK: - Frame Lifecycle
-    
+
     /// begins a new frame
     public func begin(windowWidth: Int32, windowHeight: Int32) {
         size = Vector2D(Float(max(0, windowWidth)), Float(max(0, windowHeight)))
-        
-        batches.removeAll(keepingCapacity: true)
+
+        // keep the batch slots and their Mesh objects across frames; only the
+        // per-frame vertices and draw stream are reset. prepare() can then
+        // reuse each mesh's GPU buffer instead of recreating it every frame.
+        for index in batches.indices {
+            batches[index].vertices.removeAll(keepingCapacity: true)
+        }
+        activeBatchCount = 0
+        currentBatchIndex = -1
         drawItems.removeAll(keepingCapacity: true)
         transformStack = [.identity]
         clipStack.removeAll()
         currentBlendMode = .normal
         openNewBatch(mode: .normal)
-        
+
         drawCallCount = 0
         vertexCount = 0
         triangleCount = 0
         batchCount = 0
     }
-    
+
     /// prepares GPU resources for the frame
     public func prepare(frame: Frame) throws {
         guard let renderer else { return }
 
         var totalVertices = 0
 
-        for index in batches.indices {
+        for index in 0..<activeBatchCount {
             let batchVertices = batches[index].vertices
             guard !batchVertices.isEmpty else { continue }
 
@@ -274,7 +289,7 @@ public final class Canvas2D {
         }
 
         drawCallCount = calls
-        batchCount = batches.count
+        batchCount = activeBatchCount
     }
 
     /// submits a pre-packed GPU mesh into the canvas draw stream
@@ -305,31 +320,31 @@ public final class Canvas2D {
         )
         openNewBatch(mode: currentBlendMode)
     }
-    
+
     // MARK: - Drawing Primitives
-    
+
     public func triangle(_ a: Vector2D, _ b: Vector2D, _ c: Vector2D, color: Color? = nil, emissive: Color? = nil) {
         guard valid(a), valid(b), valid(c) else { return }
         addTriangle(a, b, c, color: color ?? self.color, emissive: emissive)
     }
-    
+
     public func line(from start: Vector2D, to end: Vector2D, width: Float = 1, color: Color? = nil, emissive: Color? = nil) {
         guard valid(start), valid(end), width > 0 else { return }
-        
+
         let delta = end - start
         let length = delta.length
         guard length > 0.000001 else { return }
-        
+
         let normal = Vector2D(-delta.y, delta.x).normalized * (width * 0.5)
         let a = start + normal
         let b = start - normal
         let c = end - normal
         let d = end + normal
-        
+
         addTriangle(a, b, c, color: color ?? self.color, emissive: emissive)
         addTriangle(a, c, d, color: color ?? self.color, emissive: emissive)
     }
-    
+
     public func polyline(
         _ points: [Vector2D],
         width: Float = 1,
@@ -340,83 +355,83 @@ public final class Canvas2D {
         dash: DashPattern? = nil
     ) {
         guard points.count >= 2, width > 0 else { return }
-        
+
         let clean = cleanedPoints(points, closed: closed)
-        
+
         if closed {
             guard clean.count >= 3 else { return }
         } else {
             guard clean.count >= 2 else { return }
         }
-        
+
         strokePolyline(clean, width: width, color: color ?? self.color, closed: closed, join: join, dash: dash, emissive: emissive)
     }
-    
+
     public func rectangle(_ rect: Rect2D, filled: Bool = true, lineWidth: Float = 1, color: Color? = nil, emissive: Color? = nil) {
         let c = color ?? self.color
         let a = rect.origin
         let b = Vector2D(rect.max.x, rect.origin.y)
         let c2 = rect.max
         let d = Vector2D(rect.origin.x, rect.max.y)
-        
+
         if filled {
             addTriangle(a, b, c2, color: c, emissive: emissive)
             addTriangle(a, c2, d, color: c, emissive: emissive)
         }
-        
+
         if lineWidth > 0 {
             strokePolyline([a, b, c2, d], width: lineWidth, color: c, closed: true, emissive: emissive)
         }
     }
-    
+
     public func roundedRect(_ rect: Rect2D, cornerRadius: Float, filled: Bool = true, lineWidth: Float = 1, color: Color? = nil, emissive: Color? = nil) {
         let c = color ?? self.color
         let r = min(cornerRadius, min(rect.size.x, rect.size.y) * 0.5)
-        
+
         guard r > 0 else {
             rectangle(rect, filled: filled, lineWidth: lineWidth, color: c, emissive: emissive)
             return
         }
-        
+
         let segments = max(4, Int(r * 0.5))
         var points: [Vector2D] = []
         points.reserveCapacity(segments * 4)
-        
+
         // top-left
         for i in 0..<segments {
             let angle = Float.pi + Float(i) / Float(segments) * (Float.pi * 0.5)
             points.append(Vector2D(rect.min.x + r, rect.min.y + r) + Vector2D(cos(angle), sin(angle)) * r)
         }
-        
+
         // top-right
         for i in 0..<segments {
             let angle = Float.pi * 1.5 + Float(i) / Float(segments) * (Float.pi * 0.5)
             points.append(Vector2D(rect.max.x - r, rect.min.y + r) + Vector2D(cos(angle), sin(angle)) * r)
         }
-        
+
         // bottom-right
         for i in 0..<segments {
             let angle = Float(i) / Float(segments) * (Float.pi * 0.5)
             points.append(Vector2D(rect.max.x - r, rect.max.y - r) + Vector2D(cos(angle), sin(angle)) * r)
         }
-        
+
         // bottom-left
         for i in 0..<segments {
             let angle = Float.pi * 0.5 + Float(i) / Float(segments) * (Float.pi * 0.5)
             points.append(Vector2D(rect.min.x + r, rect.max.y - r) + Vector2D(cos(angle), sin(angle)) * r)
         }
-        
+
         if filled, points.count >= 3 {
             for i in 2..<points.count {
                 addTriangle(points[0], points[i - 1], points[i], color: c, emissive: emissive)
             }
         }
-        
+
         if lineWidth > 0 {
             strokePolyline(points, width: lineWidth, color: c, closed: true, emissive: emissive)
         }
     }
-    
+
     /// draws a circle, filled or outlined
     ///
     /// 'lineWidth' is a world-space width that does not scale with 'radius',
@@ -424,12 +439,12 @@ public final class Canvas2D {
     public func circle(at center: Vector2D, radius: Float, segments: Int = 32, filled: Bool = true, lineWidth: Float = 0.006, color: Color? = nil, emissive: Color? = nil) {
         let c = color ?? self.color
         guard radius > 0, valid(center) else { return }
-        
+
         let count = min(256, max(3, segments))
-        
+
         if filled {
             var previous = center + Vector2D(cos(0), sin(0)) * radius
-            
+
             for i in 1...count {
                 let angle = Float(i) / Float(count) * 2 * Float.pi
                 let point = center + Vector2D(cos(angle), sin(angle)) * radius
@@ -439,16 +454,16 @@ public final class Canvas2D {
         } else {
             var points: [Vector2D] = []
             points.reserveCapacity(count)
-            
+
             for i in 0..<count {
                 let angle = Float(i) / Float(count) * 2 * Float.pi
                 points.append(center + Vector2D(cos(angle), sin(angle)) * radius)
             }
-            
+
             strokePolyline(points, width: lineWidth, color: c, closed: true, emissive: emissive)
         }
     }
-    
+
     /// draws an arc between two angles, filled or outlined
     ///
     /// 'lineWidth' is a world-space width that does not scale with 'radius',
@@ -456,19 +471,19 @@ public final class Canvas2D {
     public func arc(center: Vector2D, radius: Float, startAngle: Angle, endAngle: Angle, segments: Int = 32, filled: Bool = true, lineWidth: Float = 0.006, color: Color? = nil, emissive: Color? = nil) {
         let c = color ?? self.color
         guard radius > 0, valid(center) else { return }
-        
+
         let start = startAngle.radians
         let end = endAngle.radians
         var sweep = end - start
-        
+
         while sweep < 0 { sweep += 2 * Float.pi }
         while sweep > 2 * Float.pi { sweep -= 2 * Float.pi }
-        
+
         let count = min(256, max(3, segments))
-        
+
         if filled {
             var previous = center + Vector2D(cos(start), sin(start)) * radius
-            
+
             for i in 1...count {
                 let t = Float(i) / Float(count)
                 let angle = start + sweep * t
@@ -479,17 +494,17 @@ public final class Canvas2D {
         } else {
             var points: [Vector2D] = []
             points.reserveCapacity(count + 1)
-            
+
             for i in 0...count {
                 let t = Float(i) / Float(count)
                 let angle = start + sweep * t
                 points.append(center + Vector2D(cos(angle), sin(angle)) * radius)
             }
-            
+
             strokePolyline(points, width: lineWidth, color: c, closed: false, emissive: emissive)
         }
     }
-    
+
     public func polygon(
         _ points: [Vector2D],
         fill: Color?,
@@ -501,21 +516,21 @@ public final class Canvas2D {
         emissive: Color? = nil
     ) {
         guard points.count >= 2 else { return }
-        
+
         let clean = cleanedPoints(points, closed: closed)
-        
+
         if let fill, clean.count >= 3 {
             for triangle in Triangulation.triangulate(clean) {
                 addTriangle(triangle.0, triangle.1, triangle.2, color: fill, emissive: emissive)
             }
         }
-        
+
         let stroke = strokeColor ?? fill
         guard let stroke, lineWidth > 0 else { return }
-        
+
         strokePolyline(clean, width: lineWidth, color: stroke, closed: closed, join: join, dash: dash, emissive: emissive)
     }
-    
+
     public func polygonOutline(
         _ points: [Vector2D],
         width: Float = 1,
@@ -525,13 +540,13 @@ public final class Canvas2D {
         dash: DashPattern? = nil
     ) {
         guard points.count >= 3, width > 0 else { return }
-        
+
         let clean = cleanedPoints(points, closed: true)
         guard clean.count >= 3 else { return }
-        
+
         strokePolyline(clean, width: width, color: color ?? self.color, closed: true, join: join, dash: dash, emissive: emissive)
     }
-    
+
     public func ellipse(
         in rect: Rect2D,
         fill: Color?,
@@ -545,51 +560,58 @@ public final class Canvas2D {
         let radiusX = rect.size.x * 0.5
         let radiusY = rect.size.y * 0.5
         let segments = max(16, Int(max(radiusX, radiusY) * 0.5))
-        
+
         var points: [Vector2D] = []
         points.reserveCapacity(segments)
-        
+
         for i in 0..<segments {
             let angle = Float(i) / Float(segments) * 2 * Float.pi
             points.append(Vector2D(center.x + cos(angle) * radiusX, center.y + sin(angle) * radiusY))
         }
-        
+
         if let fill {
             for i in 1..<segments - 1 {
                 addTriangle(points[0], points[i], points[i + 1], color: fill, emissive: emissive)
             }
         }
-        
+
         if let strokeColor, lineWidth > 0 {
             strokePolyline(points, width: lineWidth, color: strokeColor, closed: true, join: join, dash: dash, emissive: emissive)
         }
     }
-    
+
     // MARK: - Debug Visualization
-    
+
     public func drawBounds(_ bounds: Rect2D, color: Color) {
         rectangle(bounds, filled: false, lineWidth: 2, color: color)
     }
-    
+
     // MARK: - Internal Helpers
-    
+
     private func addTriangle(_ a: Vector2D, _ b: Vector2D, _ c: Vector2D, color: Color, emissive: Color? = nil) {
         let ta = transformPoint(a)
         let tb = transformPoint(b)
         let tc = transformPoint(c)
-        
+
         if let clip = currentClip {
             if !clip.contains(ta) && !clip.contains(tb) && !clip.contains(tc) {
                 return
             }
         }
-        
+
         let linearColor = color.linearValue
         let linearEmissive = linearEmissive(emissive)
-        
-        currentBatch.vertices.append(Vertex(position: toNDC(ta), color: linearColor, emissive: linearEmissive))
-        currentBatch.vertices.append(Vertex(position: toNDC(tb), color: linearColor, emissive: linearEmissive))
-        currentBatch.vertices.append(Vertex(position: toNDC(tc), color: linearColor, emissive: linearEmissive))
+        let batchIndex = currentBatchIndex
+
+        // append through the array element directly: going through a computed
+        // 'currentBatch' property copies the Batch, which makes every append
+        // copy the whole vertex array (quadratic build time)
+        batches[batchIndex].vertices.append(
+            Vertex(position: toNDC(ta), color: linearColor, emissive: linearEmissive))
+        batches[batchIndex].vertices.append(
+            Vertex(position: toNDC(tb), color: linearColor, emissive: linearEmissive))
+        batches[batchIndex].vertices.append(
+            Vertex(position: toNDC(tc), color: linearColor, emissive: linearEmissive))
     }
 
     /// the per-vertex emissive value for a draw call
@@ -600,13 +622,13 @@ public final class Canvas2D {
     private func linearEmissive(_ override: Color?) -> SIMD4<Float> {
         (override ?? emissive).linearValue
     }
-    
+
     private func transformPoint(_ point: Vector2D) -> Vector2D {
         var p = point - origin
         p = currentTransform.transformPoint(p)
         return p
     }
-    
+
     private func toNDC(_ point: Vector2D) -> Vector2D {
         guard size.x > 0, size.y > 0 else { return .zero }
         return Vector2D(x: point.x / size.x * 2 - 1, y: 1 - point.y / size.y * 2)
@@ -621,50 +643,61 @@ public final class Canvas2D {
     public func worldToNDC(_ point: Vector2D) -> Vector2D {
         toNDC(transformPoint(point))
     }
-    
+
     private func valid(_ point: Vector2D) -> Bool {
         point.x.isFinite && point.y.isFinite
     }
-    
+
     /// appends already-transformed (NDC) vertices to the current batch
     ///
     /// used by callers that pre-bake geometry and re-transform it only when
     /// the camera or canvas size changes
     public func submitPreTransformedVertices(_ vertices: [Vertex]) {
         guard !vertices.isEmpty else { return }
-        currentBatch.vertices.append(contentsOf: vertices)
+        batches[currentBatchIndex].vertices.append(contentsOf: vertices)
     }
-    
-    private var currentBatch: Batch {
-        get { batches[currentBatchIndex] }
-        set { batches[currentBatchIndex] = newValue }
-    }
-    
+
     private func openNewBatch(mode: BlendMode) {
-        batches.append(Batch(blendMode: mode, vertices: []))
-        currentBatchIndex = batches.count - 1
-        drawItems.append(.batch(currentBatchIndex))
+        let index = activeBatchCount
+
+        if index < batches.count {
+            // reuse a slot from a previous frame, keeping its Mesh alive unless
+            // the blend mode changed (the Surface is baked into the pipeline)
+            if batches[index].blendMode != mode {
+                batches[index].mesh = nil
+            }
+            batches[index].vertices.removeAll(keepingCapacity: true)
+            batches[index].blendMode = mode
+        } else {
+            batches.append(Batch(blendMode: mode, vertices: [], mesh: nil))
+        }
+
+        currentBatchIndex = index
+        activeBatchCount += 1
+        drawItems.append(.batch(index))
     }
-    
+
     private func flushIfNeeded(newMode: BlendMode) {
-        guard !batches.isEmpty else {
+        guard activeBatchCount > 0 else {
             openNewBatch(mode: newMode)
             return
         }
-        
-        if currentBatch.blendMode == newMode { return }
-        
-        if currentBatch.vertices.isEmpty {
-            currentBatch.blendMode = newMode
+
+        if batches[currentBatchIndex].blendMode == newMode { return }
+
+        if batches[currentBatchIndex].vertices.isEmpty {
+            // the empty slot's mesh was built for the old blend mode
+            batches[currentBatchIndex].mesh = nil
+            batches[currentBatchIndex].blendMode = newMode
         } else {
             openNewBatch(mode: newMode)
         }
     }
-    
+
     private func cleanedPoints(_ points: [Vector2D], closed: Bool) -> [Vector2D] {
         Triangulation.cleanedPoints(points, closed: closed)
     }
-    
+
     func strokePolyline(
         _ points: [Vector2D],
         width: Float,
@@ -695,13 +728,15 @@ public final class Canvas2D {
         // raw left outlined geometry (polygonOutline, unfilled circles, etc.)
         // untransformed, so it ignored the canvas transform and moved/scaled
         // incorrectly
-        currentBatch.vertices.reserveCapacity(currentBatch.vertices.count + vertices.count)
+        let batchIndex = currentBatchIndex
+        let newCapacity = batches[batchIndex].vertices.count + vertices.count
+        batches[batchIndex].vertices.reserveCapacity(newCapacity)
 
         let linearEmissive = linearEmissive(emissive)
 
         for vertex in vertices {
             let ndc = toNDC(transformPoint(vertex.position))
-            currentBatch.vertices.append(
+            batches[batchIndex].vertices.append(
                 Vertex(position: ndc, color: vertex.color, emissive: linearEmissive)
             )
         }
