@@ -97,7 +97,7 @@ private struct BenchmarkSummaryRenderer {
         var lines: [String] = []
         lines.append(ansi.paint("prism benchmark", "1"))
 
-        var meta = ["\(platform.lowercased()) / \(cores) cores"]
+        var meta = ["\(platform.lowercased()) / \(cores) logical CPUs"]
         if let driver = context["Driver"] { meta.append(driver) }
         if let window = context["Window"] { meta.append(window) }
         if let frames = context["Frames"] { meta.append("\(frames) frames") }
