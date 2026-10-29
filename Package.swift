@@ -257,6 +257,16 @@ let package: Package = Package(
             path: "Tests/PrismTests",
             resources: [.copy("Resources")]
         ),
+
+        // real-window, real-GPU smoke benchmarks. `swift test` skips them so
+        // CI stays headless; run with `PRISM_BENCHMARK=1 swift test --filter
+        // Benchmark` (or `make benchmark`). GPU workloads need the additional
+        // `PRISM_BENCHMARK_GPU=1`; every workload is conservative by design.
+        .testTarget(
+            name: "Benchmark",
+            dependencies: ["Prism", "Core", "Graphics", "Audio", "Scene", "Math", "CSDL3"],
+            path: "Tests/Benchmark"
+        ),
     ],
 
     swiftLanguageModes: [.v6],

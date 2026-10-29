@@ -22,7 +22,7 @@ PYTHON ?= python3
 # 'make run SANDBOX=/path/to/game'.
 SANDBOX ?= ../Sandbox
 
-.PHONY: all vendor fetch shaders check build test run clean
+.PHONY: all vendor fetch shaders check build test benchmark benchmark-gpu run clean
 
 all: build
 
@@ -47,6 +47,21 @@ build:
 
 test:
 	$(SWIFT) test
+
+# opens a real window and runs the safe benchmark set: AXB parsing, audio,
+# CPU workloads, and a tiny GPU clear/present smoke test. every benchmark is
+# conservative.
+# plain 'test' skips these so CI and headless machines stay headless.
+benchmark:
+	PRISM_BENCHMARK=1 PRISM_BENCHMARK_GPU=0 \
+		$(SWIFT) test --filter Benchmark
+
+# adds the guarded GPU workloads: 640x360, vsync, ~30 frames, ~5k
+# non-overlapping triangles, ~2k canvas primitives. still safe for an
+# integrated GPU.
+benchmark-gpu:
+	PRISM_BENCHMARK=1 PRISM_BENCHMARK_GPU=1 \
+		$(SWIFT) test --filter Benchmark
 
 lint:
 	$(SWIFT) format lint --recursive --configuration .swift-format Sources Tests

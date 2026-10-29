@@ -56,12 +56,33 @@ swift test
 the **Makefile** in the repo runs the same commands:
 
 ```sh
-make build  # swift build
-make test   # swift test
-make check  # verify the vendored sources + compiled SPIR-V are in sync
-make run    # launch a consuming game (`SANDBOX=` to point elsewhere)
-make clean  # remove build products
+make build         # swift build
+make test          # swift test
+make benchmark     # safe set: assets, audio, CPU, GPU clear smoke
+make benchmark-gpu # above + conservative GPU workloads
+make check         # verify the vendored sources + compiled SPIR-V are in sync
+make run           # launch a consuming game (`SANDBOX=` to point elsewhere)
+make clean         # remove build products
 ```
+
+the benchmarks are opt-in and gated in two cumulative levels. plain **swift
+test** skips all of them so CI stays headless. when a benchmark run finishes, a
+terminal summary shows each workload's timing and details, plus the platform,
+driver, window size, and frame count.
+
+| variable | enables |
+| --- | --- |
+| `PRISM_BENCHMARK=1` | AXB parse/triangulate, WAV decode/stream, CPU particle and scene updates, and a tiny GPU device + clear/present smoke test |
+| `PRISM_BENCHMARK_GPU=1` | conservative GPU workloads: ~5k non-overlapping triangles, ~2k canvas primitives, and a small AXB mesh upload |
+
+**make benchmark** forces only launches tests with `PRISM_BENCHMARK` variable. **make benchmark-gpu** adds `PRISM_BENCHMARK_GPU`. GPU runs open a visible 640x360 window, keep vsync on, pump SDL events
+every frame (close the window to stop), cap runs at 30 frames, and abort if the
+device becomes unavailable. every workload is conservative by design.
+
+workload sizes can be overridden with `PRISM_BENCHMARK_TRIANGLES`,
+`PRISM_BENCHMARK_AXB_POLYGONS`, `PRISM_BENCHMARK_AXB_GPU_POLYGONS`,
+`PRISM_BENCHMARK_CANVAS_PRIMITIVES`, `PRISM_BENCHMARK_PARTICLES` and
+`PRISM_BENCHMARK_SCENE_OBJECTS`.
 
 the shaders and the vendored sources each have their own target:
 
